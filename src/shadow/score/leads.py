@@ -1,0 +1,219 @@
+"""Compare how busy confirmed companies look on Google with what they declare to Sodra."""
+
+import csv
+from dataclasses import dataclass, field
+from datetime import date
+from pathlib import Path
+from statistics import median
+
+from shadow.config import (
+    CATEGORY_ACTIVITIES,
+    CATEGORY_LABELS,
+    EMPLOYEE_DROP_MIN_PEAK,
+    EMPLOYEE_DROP_SHARE,
+    LEAD_RATIO_MULTIPLE,
+)
+from shadow.match.places import activity_fits
+
+NORMAL_STATUS = "Teisinis stat neįregistruotas"
+SMALL_PARTNERSHIP = "Mažoji bendrija"
+
+CONFIRMED_PLACES = """
+    SELECT c.company_code, c.name, c.legal_form, c.registered_on, c.status, c.activity_code,
+           p.name, p.categories, coalesce(p.reviews_count, 0), p.years_in_business
+    FROM staging.place_matches m
+    JOIN staging.google_places p USING (snapshot_month, cid)
+    JOIN staging.companies c USING (snapshot_month, company_code)
+    WHERE m.snapshot_month = %(month)s AND m.match_status = 'confirmed'
+"""
+
+INSURED = """
+    SELECT company_code,
+           max(insured) FILTER (WHERE month = %(sodra_month)s) AS latest,
+           max(insured) AS peak
+    FROM staging.company_monthly
+    WHERE snapshot_month = %(month)s AND company_code = ANY(%(codes)s)
+    GROUP BY company_code
+"""
+
+TYPICAL_INSURED = """
+    SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY m.insured)
+    FROM staging.companies c
+    JOIN staging.company_monthly m USING (snapshot_month, company_code)
+    WHERE c.snapshot_month = %(month)s AND m.month = %(sodra_month)s
+      AND c.activity_code LIKE ANY(%(patterns)s)
+"""
+
+INSERT_LEAD = """
+    INSERT INTO mart.leads (
+        snapshot_month, rank, company_code, company_name, legal_form, category, places, reviews,
+        insured, typical_insured, reviews_per_employee, times_category_median, sodra_month,
+        supporting_reasons, caveats, explanation
+    ) VALUES (
+        %(snapshot_month)s, %(rank)s, %(company_code)s, %(company_name)s, %(legal_form)s, %(category)s,
+        %(places)s, %(reviews)s, %(insured)s, %(typical_insured)s, %(reviews_per_employee)s,
+        %(times_category_median)s, %(sodra_month)s, %(supporting_reasons)s, %(caveats)s, %(explanation)s
+    )
+"""
+
+
+@dataclass
+class Company:
+    code: str
+    name: str
+    legal_form: str | None
+    registered_on: date | None
+    status: str | None
+    activity_code: str | None
+    places: list[str] = field(default_factory=list)
+    place_categories: set[str] = field(default_factory=set)
+    reviews: int = 0
+    years_in_business: int | None = None
+    insured: int = 0
+    peak_insured: int = 0
+
+    @property
+    def category(self) -> str:
+        for category in sorted(self.place_categories):
+            if activity_fits([category], self.activity_code):
+                return category
+        return sorted(self.place_categories)[0]
+
+    @property
+    def reviews_per_employee(self) -> float:
+        return self.reviews / max(self.insured, 1)
+
+
+def supporting_reasons(company: Company, snapshot_year: int) -> list[str]:
+    reasons = []
+    if company.peak_insured >= EMPLOYEE_DROP_MIN_PEAK and company.insured <= company.peak_insured * EMPLOYEE_DROP_SHARE:
+        reasons.append(f"insured employees fell from {company.peak_insured} to {company.insured} during the year")
+    if company.years_in_business and company.registered_on:
+        company_age = snapshot_year - company.registered_on.year
+        if company.years_in_business > company_age + 1:
+            reasons.append(
+                f"Google lists the business as {company.years_in_business}+ years old, "
+                f"but the company was registered in {company.registered_on.year}"
+            )
+    if company.status and company.status != NORMAL_STATUS:
+        reasons.append(f"company status: {company.status}")
+    return reasons
+
+
+def caveats(company: Company) -> list[str]:
+    notes = ["review counts accumulate over years and include tourists"]
+    if company.legal_form == SMALL_PARTNERSHIP:
+        notes.append("small partnership (MB): owners may work without being insured employees")
+    if len(company.places) > 1:
+        notes.append(f"reviews summed over {len(company.places)} places")
+    return notes
+
+
+def is_lead(company: Company, median_reviews: float, typical_insured: float, median_ratio: float) -> bool:
+    return (
+        company.reviews >= median_reviews
+        and company.insured <= typical_insured
+        and company.reviews_per_employee >= LEAD_RATIO_MULTIPLE * median_ratio
+    )
+
+
+def explanation(company: Company, median_reviews: float, typical_insured: float, ratio: float, sodra_month: date) -> str:
+    plural, activity = CATEGORY_LABELS[company.category]
+    places = f"{len(company.places)} place" + ("s" if len(company.places) > 1 else "")
+    return (
+        f"{company.reviews:,} Google reviews across {places} (median for {plural}: {median_reviews:,.0f}); "
+        f"{company.insured} insured employee{'' if company.insured == 1 else 's'} in {sodra_month:%b %Y} "
+        f"(typical Vilnius {activity} company: {typical_insured:g}); "
+        f"{ratio:.1f}x the category median of reviews per employee."
+    )
+
+
+def build_leads(conn, month: str) -> list[dict]:
+    sodra_month = conn.execute(
+        "SELECT max(month) FROM staging.company_monthly WHERE snapshot_month = %s", (month,)
+    ).fetchone()[0]
+
+    companies: dict[str, Company] = {}
+    for code, name, form, registered, status, activity, place, categories, reviews, years in conn.execute(
+        CONFIRMED_PLACES, {"month": month}
+    ):
+        company = companies.setdefault(code, Company(code, name, form, registered, status, activity))
+        company.places.append(place)
+        company.place_categories.update(categories)
+        company.reviews += reviews
+        if years:
+            company.years_in_business = max(years, company.years_in_business or 0)
+
+    for code, latest, peak in conn.execute(
+        INSURED, {"month": month, "sodra_month": sodra_month, "codes": list(companies)}
+    ):
+        companies[code].insured = latest or 0
+        companies[code].peak_insured = peak or 0
+
+    leads = []
+    for category in CATEGORY_ACTIVITIES:
+        group = [c for c in companies.values() if c.category == category]
+        if not group:
+            continue
+        median_reviews = median(c.reviews for c in group)
+        median_ratio = median(c.reviews_per_employee for c in group)
+        patterns = [f"{prefix}%" for prefix in CATEGORY_ACTIVITIES[category]]
+        typical_insured = conn.execute(
+            TYPICAL_INSURED, {"month": month, "sodra_month": sodra_month, "patterns": patterns}
+        ).fetchone()[0]
+
+        for company in group:
+            if not is_lead(company, median_reviews, typical_insured, median_ratio):
+                continue
+            ratio = company.reviews_per_employee / median_ratio
+            leads.append(
+                {
+                    "snapshot_month": month,
+                    "company_code": company.code,
+                    "company_name": company.name,
+                    "legal_form": company.legal_form,
+                    "category": category,
+                    "places": " / ".join(company.places),
+                    "reviews": company.reviews,
+                    "insured": company.insured,
+                    "typical_insured": typical_insured,
+                    "reviews_per_employee": round(company.reviews_per_employee, 1),
+                    "times_category_median": round(ratio, 1),
+                    "sodra_month": sodra_month,
+                    "supporting_reasons": supporting_reasons(company, int(month[:4])),
+                    "caveats": caveats(company),
+                    "explanation": explanation(company, median_reviews, typical_insured, ratio, sodra_month),
+                }
+            )
+
+    leads.sort(key=lambda lead: lead["times_category_median"], reverse=True)
+    for rank, lead in enumerate(leads, start=1):
+        lead["rank"] = rank
+    return leads
+
+
+def load_leads(conn, month: str) -> list[dict]:
+    leads = build_leads(conn, month)
+    with conn.transaction():
+        conn.execute("DELETE FROM mart.leads WHERE snapshot_month = %s", (month,))
+        with conn.cursor() as cur:
+            cur.executemany(INSERT_LEAD, leads)
+    return leads
+
+
+def export_csv(leads: list[dict], month: str, data_dir: str = "data") -> Path:
+    out_dir = Path(data_dir) / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"leads_{month}.csv"
+    columns = [
+        "rank", "company_code", "company_name", "legal_form", "category", "places", "reviews",
+        "insured", "typical_insured", "times_category_median", "supporting_reasons", "caveats", "explanation",
+    ]
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
+        writer.writeheader()
+        for lead in leads:
+            writer.writerow(
+                {**lead, "supporting_reasons": "; ".join(lead["supporting_reasons"]), "caveats": "; ".join(lead["caveats"])}
+            )
+    return path

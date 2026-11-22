@@ -41,3 +41,14 @@ GENERIC_NAME_WORDS = {
     "kavine", "restoranas", "restaurant", "cafe", "bistro", "baras", "bar", "picerija", "pizza",
     "vilnius", "vilniuje", "lt",
 }
+
+
+LEAD_RATIO_MULTIPLE = 3.0
+EMPLOYEE_DROP_SHARE = 0.5
+EMPLOYEE_DROP_MIN_PEAK = 3
+
+CATEGORY_LABELS = {
+    "cafe_restaurant": ("cafés and restaurants", "food service"),
+    "hair_beauty": ("hair and beauty salons", "hair and beauty"),
+    "car_repair": ("car repair shops", "car repair"),
+}

@@ -11,7 +11,7 @@ from shadow.load.coverage import load_coverage
 from shadow.load.declared import load_declared
 from shadow.load.google import load_google
 from shadow.match.places import load_matches
-
+from shadow.score.leads import export_csv, load_leads
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Shadow economy lead pipeline")
@@ -43,6 +43,8 @@ def main():
         missing = load_coverage(conn, args.month, records, attempts)
         declared = load_declared(conn, args.month, companies, monthly)
         matches = load_matches(conn, args.month)
+        leads = load_leads(conn, args.month)
+        csv_path = export_csv(leads, args.month)
 
     print(f"Coverage: {expected_pages - len(missing)} of {expected_pages} pages collected")
     for page in missing:
@@ -61,7 +63,14 @@ def main():
     print(f"Matched {loaded['places']} places to companies:")
     for status in ("confirmed", "possible", "ambiguous", "unmatched"):
         print(f"  {status}: {matches[status]}")
+
+     
+    print(f"Leads: {len(leads)} companies, written to mart.leads and {csv_path}")
+    for lead in leads:
+        print(f"  {lead['rank']}. {lead['places']} ({lead['company_name']}): {lead['times_category_median']}x")   
+    
     return 0
+
 
 
 if __name__ == "__main__":
