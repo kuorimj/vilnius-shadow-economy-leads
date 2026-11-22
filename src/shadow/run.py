@@ -5,7 +5,8 @@ import sys
 import psycopg
 
 from shadow.config import AREAS, CATEGORIES
-from shadow.extract.google_collect import collect, load_raw
+from shadow.extract.google_collect import collect, load_attempts, load_raw
+from shadow.load.coverage import load_coverage
 from shadow.load.google import load_google
 
 
@@ -27,15 +28,18 @@ def main():
             f"Collected {summary['collected']}, already had {summary['already_had']}, "
             f"failed {len(summary['failed'])}"
         )
-        for query in summary["failed"]:
-            print(f"  failed: {query}")
 
     records = load_raw(args.month)
+    attempts = load_attempts(args.month)
     expected_pages = len(CATEGORIES) * len(AREAS)
-    print(f"Raw pages: {len(records)} of {expected_pages} expected")
 
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
         loaded = load_google(conn, args.month, records)
+        missing = load_coverage(conn, args.month, records, attempts)
+
+    print(f"Coverage: {expected_pages - len(missing)} of {expected_pages} pages collected")
+    for page in missing:
+        print(f"  missing: {page['category']} / {page['area']} ({page['attempts']} attempts)")
 
     print(f"Loaded {loaded['raw_rows']} listings into raw.google_listings")
     print(f"Built staging.google_places: {loaded['places']} unique places in Vilnius")

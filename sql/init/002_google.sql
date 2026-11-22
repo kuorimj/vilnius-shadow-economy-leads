@@ -41,3 +41,14 @@ CREATE TABLE IF NOT EXISTS staging.google_places (
     best_position   integer          NOT NULL,
     PRIMARY KEY (snapshot_month, cid)
 );
+
+CREATE TABLE IF NOT EXISTS staging.google_coverage (
+    snapshot_month  text        NOT NULL,
+    category        text        NOT NULL,
+    area            text        NOT NULL,
+    collected       boolean     NOT NULL,
+    attempts        integer     NOT NULL,
+    listings        integer     NOT NULL,
+    fetched_at      timestamptz,
+    PRIMARY KEY (snapshot_month, category, area)
+);
