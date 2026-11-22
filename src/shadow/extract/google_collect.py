@@ -3,6 +3,8 @@
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+import gzip
+import json
 
 from shadow.config import AREAS, CATEGORIES
 from shadow.extract.oxylabs import fetch_google_local
@@ -20,7 +22,7 @@ def collect(month: str, categories: list[str], areas: list[str], data_dir: str =
 
     for category in categories:
         for area in areas:
-            out_file = out_dir / f"{category}__{area}.json"
+            out_file = out_dir / f"{category}__{area}.json.gz"
             if out_file.exists():
                 summary["already_had"] += 1
                 continue
@@ -49,7 +51,8 @@ def collect(month: str, categories: list[str], areas: list[str], data_dir: str =
                 },
                 "response": result.data,
             }
-            out_file.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+            with gzip.open(out_file, "wt", encoding="utf-8") as f:
+                json.dump(record, f, ensure_ascii=False)
             summary["collected"] += 1
             print(f"  saved {out_file.name} after {len(result.attempts)} attempt(s)", flush=True)
 
@@ -57,9 +60,11 @@ def collect(month: str, categories: list[str], areas: list[str], data_dir: str =
 
 
 def load_raw(month: str, data_dir: str = "data") -> list[dict]:
-    files = sorted(raw_dir(month, data_dir).glob("*.json"))
-    return [{**json.loads(f.read_text(encoding="utf-8")), "source_file": f.name} for f in files]
-
+    records = []
+    for path in sorted(raw_dir(month, data_dir).glob("*.json.gz")):
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            records.append({**json.load(f), "source_file": path.name})
+    return records
 
 
 def load_attempts(month: str, data_dir: str = "data") -> list[dict]:

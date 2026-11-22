@@ -3,6 +3,7 @@ from pathlib import Path
 
 from shadow.extract import google_collect, oxylabs
 from shadow.extract.oxylabs import FetchResult
+import gzip
 
 FIXTURE = Path(__file__).parent / "fixtures" / "google_local_kavine_seskine.json"
 
@@ -58,7 +59,8 @@ def test_collect_saves_raw_logs_attempts_and_skips_existing(monkeypatch, tmp_pat
     summary = google_collect.collect("2026-11", ["cafe_restaurant"], ["seskine"], data_dir=tmp_path)
 
     out_dir = google_collect.raw_dir("2026-11", tmp_path)
-    saved = json.loads((out_dir / "cafe_restaurant__seskine.json").read_text(encoding="utf-8"))
+    with gzip.open(out_dir / "cafe_restaurant__seskine.json.gz", "rt", encoding="utf-8") as f:
+        saved = json.load(f)
     log_lines = (out_dir / "_attempts.jsonl").read_text(encoding="utf-8").splitlines()
 
     assert summary == {"collected": 1, "already_had": 0, "failed": []}

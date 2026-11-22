@@ -7,6 +7,7 @@ import zipfile
 from pathlib import Path
 
 import requests
+import gzip
 
 JAR_URL = "https://www.registrucentras.lt/aduomenys/?byla=JAR_IREGISTRUOTI.csv"
 SODRA_URL = "https://atvira.sodra.lt/imones/downloads/{year}/monthly-{year}.csv.zip"
@@ -77,10 +78,19 @@ def read_sodra(lines, company_codes: set[str]) -> list[dict]:
     return rows
 
 
+def extract_name(file_name: str) -> str:
+    return file_name.replace(".csv", ".vilnius.csv.gz")
+
+def open_declared(folder: Path, file_name: str, encoding: str):
+    full = folder / file_name
+    if full.exists():
+        return open(full, encoding=encoding, newline="")
+    return gzip.open(folder / extract_name(file_name), "rt", encoding=encoding, newline="")
+
 def read_declared(month: str, data_dir: str = "data") -> tuple[dict[str, dict], list[dict]]:
     folder = declared_dir(month, data_dir)
-    with open(folder / JAR_FILE, encoding="utf-8", newline="") as jar_file:
+    with open_declared(folder, JAR_FILE, "utf-8") as jar_file:
         companies = read_jar_vilnius(jar_file)
-    with open(folder / SODRA_FILE.format(year=month[:4]), encoding="utf-8-sig", newline="") as sodra_file:
+    with open_declared(folder, SODRA_FILE.format(year=month[:4]), "utf-8-sig") as sodra_file:
         monthly = read_sodra(sodra_file, set(companies))
     return companies, monthly
