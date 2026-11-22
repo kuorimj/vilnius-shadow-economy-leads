@@ -27,3 +27,17 @@ AREAS = {
     "zirmunai": "Žirmūnai",
     "zverynas": "Žvėrynas",
 }
+
+
+CATEGORY_ACTIVITIES = {
+    "cafe_restaurant": ("56.",),
+    "hair_beauty": ("96.21", "96.22"),
+    "car_repair": ("95.31", "45.2"),
+}
+
+GENERIC_NAME_WORDS = {
+    "autoservisas", "autoservisai", "servisas", "auto", "service", "centras", "autocentras",
+    "kirpykla", "kirpejas", "grozio", "studija", "salonas", "salon", "barber", "barbershop", "beauty",
+    "kavine", "restoranas", "restaurant", "cafe", "bistro", "baras", "bar", "picerija", "pizza",
+    "vilnius", "vilniuje", "lt",
+}

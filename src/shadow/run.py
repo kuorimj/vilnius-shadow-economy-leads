@@ -10,6 +10,7 @@ from shadow.extract.google_collect import collect, load_attempts, load_raw
 from shadow.load.coverage import load_coverage
 from shadow.load.declared import load_declared
 from shadow.load.google import load_google
+from shadow.match.places import load_matches
 
 
 def parse_args():
@@ -41,6 +42,7 @@ def main():
         loaded = load_google(conn, args.month, records)
         missing = load_coverage(conn, args.month, records, attempts)
         declared = load_declared(conn, args.month, companies, monthly)
+        matches = load_matches(conn, args.month)
 
     print(f"Coverage: {expected_pages - len(missing)} of {expected_pages} pages collected")
     for page in missing:
@@ -56,6 +58,9 @@ def main():
         f"  {declared['with_sodra']} with Sodra data: {declared['monthly_rows']} monthly rows, "
         f"latest month {declared['latest_month']}"
     )
+    print(f"Matched {loaded['places']} places to companies:")
+    for status in ("confirmed", "possible", "ambiguous", "unmatched"):
+        print(f"  {status}: {matches[status]}")
     return 0
 
 
