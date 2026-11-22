@@ -8,11 +8,12 @@ INSERT_RAW = """
     INSERT INTO raw.google_listings (
         snapshot_month, category, area, query, fetched_at, position,
         google_id, cid, name, rating, reviews_count, reviews_rounded,
-        google_category, address, price_band, lat, lng, source_file
+        google_category, address, price_band, years_in_business, lat, lng, source_file
     ) VALUES (
         %(snapshot_month)s, %(category)s, %(area)s, %(query)s, %(fetched_at)s, %(position)s,
         %(google_id)s, %(cid)s, %(name)s, %(rating)s, %(reviews_count)s, %(reviews_rounded)s,
-        %(google_category)s, %(address)s, %(price_band)s, %(lat)s, %(lng)s, %(source_file)s
+        %(google_category)s, %(address)s, %(price_band)s, %(years_in_business)s,
+        %(lat)s, %(lng)s, %(source_file)s
     )
 """
 
@@ -43,7 +44,8 @@ BUILD_STAGING = """
     )
     SELECT
         l.snapshot_month, l.cid, l.google_id, l.name, l.rating, l.reviews_count,
-        l.reviews_rounded, l.google_category, l.address, l.price_band, l.lat, l.lng,
+        l.reviews_rounded, l.google_category, l.address, l.price_band, l.years_in_business,
+        l.lat, l.lng,
         s.appearances, s.categories, s.areas, s.best_position
     FROM latest l
     JOIN seen s USING (cid)
@@ -73,6 +75,7 @@ def listing_rows(month: str, records: list[dict]) -> list[dict]:
                     "google_category": listing.category,
                     "address": listing.address,
                     "price_band": listing.price_band,
+                    "years_in_business": listing.years_in_business,
                     "lat": listing.lat,
                     "lng": listing.lng,
                     "source_file": record["source_file"],
@@ -97,9 +100,12 @@ def load_google(conn, month: str, records: list[dict]) -> dict:
     staging_count = conn.execute(
         "SELECT count(*) FROM staging.google_places WHERE snapshot_month = %s", (month,)
     ).fetchone()[0]
-    outside_vilnius = conn.execute(
+    excluded = conn.execute(
         """
-        SELECT count(DISTINCT cid) FROM raw.google_listings r
+        SELECT
+            count(DISTINCT cid) FILTER (WHERE lat IS NULL OR lng IS NULL) AS missing_location,
+            count(DISTINCT cid) FILTER (WHERE lat IS NOT NULL AND lng IS NOT NULL) AS outside_vilnius
+        FROM raw.google_listings r
         WHERE snapshot_month = %(month)s AND cid IS NOT NULL
           AND NOT EXISTS (
               SELECT 1 FROM staging.google_places s
@@ -107,5 +113,10 @@ def load_google(conn, month: str, records: list[dict]) -> dict:
           )
         """,
         {"month": month},
-    ).fetchone()[0]
-    return {"raw_rows": raw_count, "places": staging_count, "outside_vilnius": outside_vilnius}
+    ).fetchone()
+    return {
+        "raw_rows": raw_count,
+        "places": staging_count,
+        "missing_location": excluded[0],
+        "outside_vilnius": excluded[1],
+    }

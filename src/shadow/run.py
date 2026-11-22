@@ -38,10 +38,9 @@ def main():
         loaded = load_google(conn, args.month, records)
 
     print(f"Loaded {loaded['raw_rows']} listings into raw.google_listings")
-    print(
-        f"Built staging.google_places: {loaded['places']} unique places in Vilnius, "
-        f"{loaded['outside_vilnius']} excluded as outside Vilnius"
-    )
+    print(f"Built staging.google_places: {loaded['places']} unique places in Vilnius")
+    print(f"  excluded, outside Vilnius: {loaded['outside_vilnius']}")
+    print(f"  excluded, no location on the page: {loaded['missing_location']}")
     return 0
 
 
