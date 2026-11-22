@@ -58,4 +58,4 @@ def collect(month: str, categories: list[str], areas: list[str], data_dir: str =
 
 def load_raw(month: str, data_dir: str = "data") -> list[dict]:
     files = sorted(raw_dir(month, data_dir).glob("*.json"))
-    return [json.loads(f.read_text(encoding="utf-8")) for f in files]
+    return [{**json.loads(f.read_text(encoding="utf-8")), "source_file": f.name} for f in files]
