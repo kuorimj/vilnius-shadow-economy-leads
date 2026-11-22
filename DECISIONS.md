@@ -13,3 +13,11 @@ The system has to run with one command on a clean machine, from a public reposit
 | Declared activity data | Collected directly from the official sources: data.gov.lt API (get.data.gov.lt), Sodra open company data (atvira.sodra.lt), Registrų centras | Third-party company databases and aggregators | Official, free, regularly updated and available as APIs or downloads, so no scraping and no intermediary is needed. |
 
 **Production path:** the same stages move to managed services, with an orchestrator (Airflow/MWAA or Step Functions), managed Postgres (RDS) and raw snapshots in S3, defined in Terraform.
+
+## Google data collection
+
+- One page-1 query per category (cafés/restaurants, hair/beauty, car repair) and Vilnius eldership (21), so 63 pages per month. City-wide queries rank prominent central places first; neighbourhood queries reach local businesses.
+- Oxylabs requests fault intermittently, so each query gets up to 5 attempts with backoff, every attempt is logged, and already-saved pages are skipped on re-runs.
+- Raw pages are kept unchanged, duplicates included. Deduplication happens in the staging layer, using Google's place ID (CID) as the key.
+
+**November 2026 snapshot:** 55 of 63 pages (87%), 855 listings, 739 unique places. 8 pages failed after repeated attempts; each run reports pages collected against the 63 expected. Naujamiestis and Naujininkai cafés were retried separately, and each added 15 to 17 places no other query had found, so the remaining gaps are real blind spots, not repeats.
