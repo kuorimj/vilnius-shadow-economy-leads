@@ -1,9 +1,12 @@
 import argparse
+import os
 import sys
+
+import psycopg
 
 from shadow.config import AREAS, CATEGORIES
 from shadow.extract.google_collect import collect, load_raw
-from shadow.extract.google_local import html_from_response, parse_listings
+from shadow.load.google import load_google
 
 
 def parse_args():
@@ -28,16 +31,17 @@ def main():
             print(f"  failed: {query}")
 
     records = load_raw(args.month)
-    listings = [
-        listing
-        for record in records
-        for listing in parse_listings(html_from_response(record["response"]))
-    ]
-    unique_places = {listing.cid for listing in listings}
     expected_pages = len(CATEGORIES) * len(AREAS)
-
     print(f"Raw pages: {len(records)} of {expected_pages} expected")
-    print(f"Listings parsed: {len(listings)}, unique places: {len(unique_places)}")
+
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        loaded = load_google(conn, args.month, records)
+
+    print(f"Loaded {loaded['raw_rows']} listings into raw.google_listings")
+    print(
+        f"Built staging.google_places: {loaded['places']} unique places in Vilnius, "
+        f"{loaded['outside_vilnius']} excluded as outside Vilnius"
+    )
     return 0
 
 
