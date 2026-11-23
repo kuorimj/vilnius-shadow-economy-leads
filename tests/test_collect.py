@@ -31,6 +31,18 @@ def test_fetch_retries_faults_then_succeeds(monkeypatch):
     assert [a["status"] for a in result.attempts] == [500, 500, 200]
 
 
+def test_fetch_retries_rate_limiting(monkeypatch):
+    responses = [FakeResponse(429), FakeResponse(200, {"results": []})]
+    monkeypatch.setenv("OXYLABS_WEB_API_KEY", "test-key")
+    monkeypatch.setattr(oxylabs.requests, "post", lambda *args, **kwargs: responses.pop(0))
+    monkeypatch.setattr(oxylabs.time, "sleep", lambda seconds: None)
+
+    result = oxylabs.fetch_google_local("kavinė Šeškinė Vilnius")
+
+    assert result.data == {"results": []}
+    assert [a["status"] for a in result.attempts] == [429, 200]
+
+
 def test_fetch_does_not_retry_client_errors(monkeypatch):
     calls = []
     monkeypatch.setenv("OXYLABS_WEB_API_KEY", "test-key")

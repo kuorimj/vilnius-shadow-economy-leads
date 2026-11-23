@@ -10,6 +10,7 @@ import requests
 API_URL = "https://webapi.oxylabs.io/v1/scrape/google/maps"
 MAX_ATTEMPTS = 5
 TIMEOUT_SECONDS = 150
+TOO_MANY_REQUESTS = 429
 
 
 @dataclass
@@ -41,7 +42,7 @@ def fetch_google_local(query: str) -> FetchResult:
         if response is not None and response.ok:
             result.data = response.json()
             return result
-        if status is not None and status < 500:
+        if status is not None and status < 500 and status != TOO_MANY_REQUESTS:
             return result
         if attempt < MAX_ATTEMPTS:
             time.sleep(5 * attempt)
