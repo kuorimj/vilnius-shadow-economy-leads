@@ -15,7 +15,7 @@ The system has to run with one command on a clean machine, from a public reposit
 | Analyst output | CSV export plus the `mart.leads` table, queryable with SQL | Streamlit UI | Cut for now due to time: matching and scoring quality mattered more than an interface. A UI on top of `mart.leads` is the natural next step. |
 | Raw data for replay | Google pages gzipped unchanged; Vilnius-only extracts of the official files (original lines); 34 MB in Git | Parquet; Git LFS | Gzip keeps the source bytes identical, and live and replay read the same format. LFS would force reviewers to install extra tooling. |
 
-**Production path:** the same stages under an orchestrator (Airflow/MWAA or Step Functions), raw pages in S3, tables in RDS or Parquet on Athena, all in Terraform.
+**Production path:** the same stages as Airflow tasks, one DAG run per month, defined in Terraform. On GCP: Cloud Composer, raw pages in Cloud Storage, tables in BigQuery, the API key in Secret Manager. On AWS: MWAA, S3, RDS or Athena, Secrets Manager.
 
 ## Google data collection
 
