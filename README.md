@@ -114,8 +114,10 @@ Sodra monthly ─────┘    staging.company_monthly                     
 | `staging` | `place_matches` | Match outcome and evidence for every place |
 | `mart` | `leads` | The lead list |
 | `mart` | `quality_checks` | Result of every data quality check, per month |
+| `mart` | `company_versions`, `place_versions` | Every version of each company and place across months (SCD type 2) |
+| `mart` | `place_review_changes`, `company_insured_changes` | Views: month-to-month change in reviews and insured employees |
 
-Every table carries `snapshot_month`, and each run replaces its month in one transaction, so re-runs are idempotent.
+Every table carries `snapshot_month`, and each run replaces its month in one transaction, so re-runs are idempotent and monthly snapshots accumulate. The version tables are rebuilt from all stored months on every run.
 
 ## Project layout
 
@@ -125,6 +127,7 @@ src/shadow/
   snapshot.py         prepares a month's data for committing
   config.py           categories, neighbourhoods and all thresholds
   quality.py          data quality checks between layers
+  history.py          versions of companies and places across months
   extract/            Oxylabs client, collector, Google parser, declared-data reader, revenue API client
   load/               loaders for Google data, coverage, declared data and revenue
   match/              name normalisation and place-to-company matching
@@ -148,5 +151,5 @@ spikes/               early probes of the Oxylabs endpoint
 
 `main` is protected: no direct pushes, including the owner's. Every change goes through a pull request, and merging is blocked until both CI checks pass:
 
-- `unit-tests`: the pytest suite (parser, matching, revenue, scoring, quality checks, snapshot).
+- `unit-tests`: the pytest suite (parser, matching, revenue, scoring, quality checks, history, snapshot).
 - `replay`: `docker compose up` on the committed snapshot, which must pass the data quality checks and reproduce `data/output/leads_2026-11.csv` exactly.
