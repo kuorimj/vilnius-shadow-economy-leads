@@ -1,9 +1,10 @@
+import gzip
 import json
 from pathlib import Path
 
 from shadow.extract import google_collect, oxylabs
+from shadow.extract.google_collect import CollectSummary
 from shadow.extract.oxylabs import FetchResult
-import gzip
 
 FIXTURE = Path(__file__).parent / "fixtures" / "google_local_kavine_seskine.json"
 
@@ -75,7 +76,7 @@ def test_collect_saves_raw_logs_attempts_and_skips_existing(monkeypatch, tmp_pat
         saved = json.load(f)
     log_lines = (out_dir / "_attempts.jsonl").read_text(encoding="utf-8").splitlines()
 
-    assert summary == {"collected": 1, "already_had": 0, "failed": []}
+    assert summary == CollectSummary(collected=1)
     assert calls == ["kavinė Šeškinė Vilnius"]
     assert saved["meta"]["attempts"] == 2
     assert saved["response"] == response
@@ -83,7 +84,7 @@ def test_collect_saves_raw_logs_attempts_and_skips_existing(monkeypatch, tmp_pat
 
     second = google_collect.collect("2026-11", ["cafe_restaurant"], ["seskine"], data_dir=tmp_path)
 
-    assert second["already_had"] == 1
+    assert second.already_had == 1
     assert len(calls) == 1
 
 
@@ -96,5 +97,5 @@ def test_collect_records_failed_queries(monkeypatch, tmp_path):
 
     summary = google_collect.collect("2026-11", ["car_repair"], ["zirmunai"], data_dir=tmp_path)
 
-    assert summary["failed"] == ["autoservisas Žirmūnai Vilnius"]
+    assert summary.failed == ["autoservisas Žirmūnai Vilnius"]
     assert not (google_collect.raw_dir("2026-11", tmp_path) / "car_repair__zirmunai.json").exists()

@@ -1,3 +1,21 @@
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/test_declared.py" = ["E501"]  # sample rows copied verbatim from the source files
+
+[tool.ruff.lint.isort]
+known-first-party = ["shadow"]
+
+[tool.mypy]
+python_version = "3.14"
+files = ["src"]
+mypy_path = "src"

@@ -3,7 +3,7 @@
 import os
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import requests
 
@@ -25,7 +25,7 @@ def fetch_google_local(query: str) -> FetchResult:
     result = FetchResult()
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
-        started_at = datetime.now(timezone.utc).isoformat()
+        started_at = datetime.now(UTC).isoformat()
         try:
             response = requests.post(API_URL, headers=headers, json=body, timeout=TIMEOUT_SECONDS)
             status = response.status_code

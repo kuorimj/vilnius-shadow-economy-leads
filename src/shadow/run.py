@@ -18,6 +18,7 @@ from shadow.months import month_arg, month_start
 from shadow.quality import INPUT_CHECKS, OUTPUT_CHECKS, blocking, describe, run_checks
 from shadow.score.leads import export_csv, load_leads
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Shadow economy lead pipeline")
     parser.add_argument("--month", required=True, type=month_arg, help="Snapshot month, format YYYY-MM")
@@ -33,8 +34,8 @@ def main():
     if args.mode == "live":
         summary = collect(args.month, args.categories, args.areas)
         print(
-            f"Collected {summary['collected']}, already had {summary['already_had']}, "
-            f"failed {len(summary['failed'])}"
+            f"Collected {summary.collected}, already had {summary.already_had}, "
+            f"failed {len(summary.failed)}"
         )
         download_declared(args.month)
 

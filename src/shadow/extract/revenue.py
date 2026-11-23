@@ -9,7 +9,7 @@ import argparse
 import gzip
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import psycopg
@@ -59,7 +59,7 @@ def fetch_company(session: requests.Session, code: str) -> dict:
 
     return {
         "company_code": code,
-        "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "fetched_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "entity": entity,
         "statements": statements,
     }
