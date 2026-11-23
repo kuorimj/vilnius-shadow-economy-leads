@@ -1,5 +1,7 @@
 """Load parsed Google listings into raw.google_listings and build staging.google_places."""
 
+from datetime import date
+
 from shadow.extract.google_local import html_from_response, parse_listings
 
 VILNIUS_BOUNDS = {"lat_min": 54.56, "lat_max": 54.84, "lng_min": 25.02, "lng_max": 25.49}
@@ -52,7 +54,7 @@ BUILD_STAGING = """
 """
 
 
-def listing_rows(month: str, records: list[dict]) -> list[dict]:
+def listing_rows(month: date, records: list[dict]) -> list[dict]:
     rows = []
     for record in records:
         meta = record["meta"]
@@ -84,7 +86,7 @@ def listing_rows(month: str, records: list[dict]) -> list[dict]:
     return rows
 
 
-def load_google(conn, month: str, records: list[dict]) -> dict:
+def load_google(conn, month: date, records: list[dict]) -> dict:
     rows = listing_rows(month, records)
 
     with conn.transaction():

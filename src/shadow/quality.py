@@ -7,6 +7,7 @@ Thresholds come from the November 2026 baseline, with room for normal month-to-m
 """
 
 from dataclasses import dataclass
+from datetime import date
 
 ERROR = "error"
 WARN = "warn"
@@ -18,7 +19,6 @@ CONFIRMED_COMPANIES = (
     "(SELECT DISTINCT company_code FROM staging.place_matches "
     "WHERE snapshot_month = %(month)s AND match_status = 'confirmed')"
 )
-SNAPSHOT_DATE = "to_date(%(month)s, 'YYYY-MM')"
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,7 @@ INPUT_CHECKS = [
     ),
     Check(
         "google_fetched_in_snapshot_month", "google",
-        "SELECT avg((to_char(fetched_at AT TIME ZONE 'UTC', 'YYYY-MM') = %(month)s)::int) "
+        "SELECT avg((date_trunc('month', fetched_at AT TIME ZONE 'UTC')::date = %(month)s)::int) "
         "FROM raw.google_listings WHERE snapshot_month = %(month)s",
         min_value=1,
     ),
@@ -77,8 +77,8 @@ INPUT_CHECKS = [
     ),
     Check(
         "sodra_months_behind", "declared",
-        f"SELECT (extract(year FROM {SNAPSHOT_DATE}) - extract(year FROM max(month))) * 12 "
-        f"+ extract(month FROM {SNAPSHOT_DATE}) - extract(month FROM max(month)) "
+        "SELECT (extract(year FROM %(month)s::date) - extract(year FROM max(month))) * 12 "
+        "+ extract(month FROM %(month)s::date) - extract(month FROM max(month)) "
         "FROM staging.company_monthly WHERE snapshot_month = %(month)s",
         max_value=3,
     ),
@@ -108,7 +108,7 @@ INPUT_CHECKS = [
     ),
     Check(
         "revenue_years_behind", "revenue",
-        f"SELECT extract(year FROM {SNAPSHOT_DATE}) - max(extract(year FROM period_end)) "
+        "SELECT extract(year FROM %(month)s::date) - max(extract(year FROM period_end)) "
         "FROM staging.company_revenue WHERE snapshot_month = %(month)s",
         max_value=2, severity=WARN,
     ),
@@ -148,7 +148,7 @@ def passes(check: Check, value: float | None) -> bool:
     return True
 
 
-def run_checks(conn, month: str, checks: list[Check], reset: bool = False) -> list[dict]:
+def run_checks(conn, month: date, checks: list[Check], reset: bool = False) -> list[dict]:
     results = []
     for check in checks:
         value = conn.execute(check.sql, {"month": month}).fetchone()[0]

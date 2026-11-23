@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS staging.companies (
-    snapshot_month  text    NOT NULL,
-    company_code    text    NOT NULL,
-    name            text    NOT NULL,
+    snapshot_month  month_start  NOT NULL,
+    company_code    text         NOT NULL,
+    name            text         NOT NULL,
     legal_form      text,
     address         text,
     registered_on   date,
@@ -12,9 +12,9 @@ CREATE TABLE IF NOT EXISTS staging.companies (
 );
 
 CREATE TABLE IF NOT EXISTS staging.company_monthly (
-    snapshot_month  text           NOT NULL,
-    company_code    text           NOT NULL,
-    month           date           NOT NULL,
+    snapshot_month  month_start     NOT NULL,
+    company_code    text            NOT NULL,
+    month           month_start     NOT NULL,
     insured         integer,
     avg_wage        numeric(10, 2),
     contributions   numeric(14, 2),

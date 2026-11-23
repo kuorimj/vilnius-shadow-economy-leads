@@ -109,13 +109,14 @@ def revenue_rows(records: list[dict]) -> list[dict]:
 
 def main():
     from shadow.match.places import confirmed_company_codes
+    from shadow.months import month_arg, month_start
 
     parser = argparse.ArgumentParser(description="Fetch revenue for companies confirmed by matching")
-    parser.add_argument("--month", required=True, help="Snapshot month, format YYYY-MM")
+    parser.add_argument("--month", required=True, type=month_arg, help="Snapshot month, format YYYY-MM")
     args = parser.parse_args()
 
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
-        codes = confirmed_company_codes(conn, args.month)
+        codes = confirmed_company_codes(conn, month_start(args.month))
     summary = collect_revenue(args.month, codes)
     print(f"Revenue: fetched {summary['fetched']} companies, already had {summary['already_had']}")
 

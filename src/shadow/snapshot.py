@@ -11,6 +11,7 @@ import shutil
 
 from shadow.extract.declared import JAR_FILE, SODRA_FILE, VILNIUS_PREFIX, declared_dir, extract_name
 from shadow.extract.google_collect import raw_dir
+from shadow.months import month_arg
 
 
 def compress_pages(month: str, data_dir: str = "data") -> int:
@@ -60,7 +61,7 @@ def write_declared_extracts(month: str, data_dir: str = "data") -> tuple[int, in
 
 def main():
     parser = argparse.ArgumentParser(description="Prepare a month's raw data for committing")
-    parser.add_argument("--month", required=True, help="Snapshot month, format YYYY-MM")
+    parser.add_argument("--month", required=True, type=month_arg, help="Snapshot month, format YYYY-MM")
     args = parser.parse_args()
 
     pages = compress_pages(args.month)

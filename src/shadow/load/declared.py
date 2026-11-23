@@ -1,5 +1,7 @@
 """Load Vilnius companies and their monthly Sodra figures into staging."""
 
+from datetime import date
+
 COMPANY_COLUMNS = (
     "snapshot_month", "company_code", "name", "legal_form", "address",
     "registered_on", "status", "activity_code", "activity_name",
@@ -14,7 +16,7 @@ def latest_activity(monthly: list[dict]) -> dict[str, tuple[str | None, str | No
     return latest
 
 
-def load_declared(conn, month: str, companies: dict[str, dict], monthly: list[dict]) -> dict:
+def load_declared(conn, month: date, companies: dict[str, dict], monthly: list[dict]) -> dict:
     activity = latest_activity(monthly)
 
     with conn.transaction():
