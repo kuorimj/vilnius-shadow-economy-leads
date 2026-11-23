@@ -1,6 +1,6 @@
 from datetime import date
 
-from shadow.score.leads import Company, caveats, explanation, is_lead, supporting_reasons
+from shadow.score.leads import Company, annual_revenue, caveats, explanation, is_lead, supporting_reasons
 
 
 def company(**overrides):
@@ -68,3 +68,28 @@ def test_explanation_reads_naturally():
         "2 insured employees in Sep 2026 (typical Vilnius food service company: 7); "
         "59.1x the category median of reviews per employee."
     )
+
+
+def test_revenue_is_scaled_to_twelve_months():
+    assert annual_revenue(130_000, date(2021, 1, 1), date(2022, 1, 31)) == 120_000
+    assert annual_revenue(426_740, date(2024, 1, 1), date(2024, 12, 31)) == 426_740
+
+
+def test_low_revenue_for_the_reviews_is_a_supporting_reason():
+    busy = company(revenue=40_000, revenue_year=2024)  # 3,700 reviews: 925 per EUR 10k
+    assert supporting_reasons(busy, 2026, median_revenue_ratio=50) == [
+        "low declared revenue for its reviews: 925.0 reviews per EUR 10k of 2024 revenue, 18.5x the category median"
+    ]
+    fabai = company(revenue=426_740, revenue_year=2024)  # 86.7 per EUR 10k: 1.7x, below the 3x threshold
+    assert supporting_reasons(fabai, 2026, median_revenue_ratio=50) == []
+
+
+def test_zero_revenue_is_a_supporting_reason():
+    assert supporting_reasons(company(revenue=0, revenue_year=2024), 2026, median_revenue_ratio=20) == [
+        "declared no sales revenue in 2024"
+    ]
+
+
+def test_caveats_say_which_year_the_revenue_is_from():
+    assert "revenue is from the 2024 financial statements" in caveats(company(revenue=1, revenue_year=2024))
+    assert "no financial statements found" in caveats(company())

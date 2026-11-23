@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS mart.leads (
     reviews               integer        NOT NULL,
     insured               integer        NOT NULL,
     typical_insured       numeric(6, 1)  NOT NULL,
+    revenue               numeric(14, 0),
+    revenue_year          integer,
     reviews_per_employee  numeric(10, 1) NOT NULL,
     times_category_median numeric(10, 1) NOT NULL,
     sodra_month           date           NOT NULL,

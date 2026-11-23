@@ -45,15 +45,23 @@ TYPICAL_INSURED = """
       AND c.activity_code LIKE ANY(%(patterns)s)
 """
 
+LATEST_REVENUE = """
+    SELECT DISTINCT ON (company_code) company_code, period_start, period_end, revenue
+    FROM staging.company_revenue
+    WHERE snapshot_month = %(month)s AND company_code = ANY(%(codes)s)
+    ORDER BY company_code, period_end DESC, submitted_on DESC
+"""
+
 INSERT_LEAD = """
     INSERT INTO mart.leads (
         snapshot_month, rank, company_code, company_name, legal_form, category, places, reviews,
-        insured, typical_insured, reviews_per_employee, times_category_median, sodra_month,
-        supporting_reasons, caveats, explanation
+        insured, typical_insured, revenue, revenue_year, reviews_per_employee, times_category_median,
+        sodra_month, supporting_reasons, caveats, explanation
     ) VALUES (
         %(snapshot_month)s, %(rank)s, %(company_code)s, %(company_name)s, %(legal_form)s, %(category)s,
-        %(places)s, %(reviews)s, %(insured)s, %(typical_insured)s, %(reviews_per_employee)s,
-        %(times_category_median)s, %(sodra_month)s, %(supporting_reasons)s, %(caveats)s, %(explanation)s
+        %(places)s, %(reviews)s, %(insured)s, %(typical_insured)s, %(revenue)s, %(revenue_year)s,
+        %(reviews_per_employee)s, %(times_category_median)s, %(sodra_month)s, %(supporting_reasons)s,
+        %(caveats)s, %(explanation)s
     )
 """
 
@@ -72,6 +80,8 @@ class Company:
     years_in_business: int | None = None
     insured: int = 0
     peak_insured: int = 0
+    revenue: float | None = None
+    revenue_year: int | None = None
 
     @property
     def category(self) -> str:
@@ -84,9 +94,28 @@ class Company:
     def reviews_per_employee(self) -> float:
         return self.reviews / max(self.insured, 1)
 
+    @property
+    def reviews_per_10k_revenue(self) -> float | None:
+        if not self.revenue or self.revenue <= 0:
+            return None
+        return self.reviews / (self.revenue / 10_000)
 
-def supporting_reasons(company: Company, snapshot_year: int) -> list[str]:
+
+def annual_revenue(revenue: float, period_start: date, period_end: date) -> float:
+    months = (period_end.year - period_start.year) * 12 + period_end.month - period_start.month + 1
+    return revenue * 12 / months
+
+
+def supporting_reasons(company: Company, snapshot_year: int, median_revenue_ratio: float | None = None) -> list[str]:
     reasons = []
+    if company.revenue is not None and company.revenue <= 0:
+        reasons.append(f"declared no sales revenue in {company.revenue_year}")
+    ratio = company.reviews_per_10k_revenue
+    if ratio and median_revenue_ratio and ratio >= LEAD_RATIO_MULTIPLE * median_revenue_ratio:
+        reasons.append(
+            f"low declared revenue for its reviews: {ratio:.1f} reviews per EUR 10k of {company.revenue_year} "
+            f"revenue, {ratio / median_revenue_ratio:.1f}x the category median"
+        )
     if company.peak_insured >= EMPLOYEE_DROP_MIN_PEAK and company.insured <= company.peak_insured * EMPLOYEE_DROP_SHARE:
         reasons.append(f"insured employees fell from {company.peak_insured} to {company.insured} during the year")
     if company.years_in_business and company.registered_on:
@@ -107,6 +136,10 @@ def caveats(company: Company) -> list[str]:
         notes.append("small partnership (MB): owners may work without being insured employees")
     if len(company.places) > 1:
         notes.append(f"reviews summed over {len(company.places)} places")
+    if company.revenue_year:
+        notes.append(f"revenue is from the {company.revenue_year} financial statements")
+    else:
+        notes.append("no financial statements found")
     return notes
 
 
@@ -151,6 +184,13 @@ def build_leads(conn, month: str) -> list[dict]:
         companies[code].insured = latest or 0
         companies[code].peak_insured = peak or 0
 
+    for code, period_start, period_end, revenue in conn.execute(
+        LATEST_REVENUE, {"month": month, "codes": list(companies)}
+    ):
+        if revenue is not None:
+            companies[code].revenue = annual_revenue(float(revenue), period_start, period_end)
+            companies[code].revenue_year = period_end.year
+
     leads = []
     for category in CATEGORY_ACTIVITIES:
         group = [c for c in companies.values() if c.category == category]
@@ -158,6 +198,8 @@ def build_leads(conn, month: str) -> list[dict]:
             continue
         median_reviews = median(c.reviews for c in group)
         median_ratio = median(c.reviews_per_employee for c in group)
+        revenue_ratios = [c.reviews_per_10k_revenue for c in group if c.reviews_per_10k_revenue]
+        median_revenue_ratio = median(revenue_ratios) if revenue_ratios else None
         patterns = [f"{prefix}%" for prefix in CATEGORY_ACTIVITIES[category]]
         typical_insured = conn.execute(
             TYPICAL_INSURED, {"month": month, "sodra_month": sodra_month, "patterns": patterns}
@@ -178,10 +220,12 @@ def build_leads(conn, month: str) -> list[dict]:
                     "reviews": company.reviews,
                     "insured": company.insured,
                     "typical_insured": typical_insured,
+                    "revenue": round(company.revenue) if company.revenue is not None else None,
+                    "revenue_year": company.revenue_year,
                     "reviews_per_employee": round(company.reviews_per_employee, 1),
                     "times_category_median": round(ratio, 1),
                     "sodra_month": sodra_month,
-                    "supporting_reasons": supporting_reasons(company, int(month[:4])),
+                    "supporting_reasons": supporting_reasons(company, int(month[:4]), median_revenue_ratio),
                     "caveats": caveats(company),
                     "explanation": explanation(company, median_reviews, typical_insured, ratio, sodra_month),
                 }
@@ -208,7 +252,8 @@ def export_csv(leads: list[dict], month: str, data_dir: str = "data") -> Path:
     path = out_dir / f"leads_{month}.csv"
     columns = [
         "rank", "company_code", "company_name", "legal_form", "category", "places", "reviews",
-        "insured", "typical_insured", "times_category_median", "supporting_reasons", "caveats", "explanation",
+        "insured", "typical_insured", "revenue", "revenue_year", "times_category_median",
+        "supporting_reasons", "caveats", "explanation",
     ]
     with open(path, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")

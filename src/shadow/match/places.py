@@ -114,3 +114,12 @@ def load_matches(conn, month: str) -> dict[str, int]:
                     },
                 )
     return counts
+
+
+def confirmed_company_codes(conn, month: str) -> list[str]:
+    rows = conn.execute(
+        "SELECT DISTINCT company_code FROM staging.place_matches "
+        "WHERE snapshot_month = %s AND match_status = 'confirmed' ORDER BY company_code",
+        (month,),
+    )
+    return [code for (code,) in rows]
