@@ -1,6 +1,15 @@
 from datetime import date
 
-from shadow.score.leads import Company, annual_revenue, caveats, explanation, is_lead, supporting_reasons
+from shadow.score.leads import (
+    Company,
+    annual_revenue,
+    caveats,
+    explanation,
+    is_lead,
+    is_sales_lead,
+    sales_explanation,
+    supporting_reasons,
+)
 
 
 def company(**overrides):
@@ -93,3 +102,37 @@ def test_zero_revenue_is_a_supporting_reason():
 def test_caveats_say_which_year_the_revenue_is_from():
     assert "revenue is from the 2024 financial statements" in caveats(company(revenue=1, revenue_year=2024))
     assert "no financial statements found" in caveats(company())
+
+
+def darmelita(**overrides):
+    values = dict(
+        name='Uždaroji akcinė bendrovė "DARMELITA"', activity_code="96.02.00", places=["Darmelita"],
+        place_categories={"hair_beauty"}, reviews=136, insured=8, peak_insured=8, avg_wage=1102.0,
+        revenue=3249.0, revenue_year=2025, previous_revenue=42397.0, previous_revenue_year=2024,
+    )
+    values.update(overrides)
+    return company(**values)
+
+
+def test_revenue_drop_and_wage_bill():
+    assert darmelita().revenue_dropped
+    assert darmelita().wage_bill == 8 * 1102 * 12
+    assert darmelita().below_wages
+    assert not darmelita(revenue=30000.0).revenue_dropped
+    assert not darmelita(previous_revenue=None).revenue_dropped
+    assert not darmelita(avg_wage=None).below_wages
+
+
+def test_busy_company_with_contradicting_declarations_is_a_sales_lead():
+    assert is_sales_lead(darmelita(), median_reviews=116.5)
+    assert not is_sales_lead(darmelita(reviews=40), median_reviews=116.5)
+    healthy = darmelita(revenue=450000.0, previous_revenue=420000.0)
+    assert not is_sales_lead(healthy, median_reviews=116.5)
+
+
+def test_sales_explanation_reads_naturally():
+    assert sales_explanation(darmelita(activity_code="96.21.00"), median_reviews=116.5) == (
+        "136 Google reviews across 1 place (median for hair and beauty salons: 116), "
+        "but declared revenue fell from EUR 42,397 in 2024 to EUR 3,249 in 2025, "
+        "below its estimated wage bill of EUR 105,792."
+    )

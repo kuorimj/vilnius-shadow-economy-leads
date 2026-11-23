@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS mart.leads (
     snapshot_month        text           NOT NULL,
     rank                  integer        NOT NULL,
+    lead_type             text           NOT NULL CHECK (lead_type IN ('staff', 'sales')),
     company_code          text           NOT NULL,
     company_name          text           NOT NULL,
     legal_form            text,
@@ -12,7 +13,7 @@ CREATE TABLE IF NOT EXISTS mart.leads (
     revenue               numeric(14, 0),
     revenue_year          integer,
     reviews_per_employee  numeric(10, 1) NOT NULL,
-    times_category_median numeric(10, 1) NOT NULL,
+    times_category_median numeric(10, 1),
     sodra_month           date           NOT NULL,
     supporting_reasons    text[]         NOT NULL,
     caveats               text[]         NOT NULL,

@@ -46,6 +46,7 @@ GENERIC_NAME_WORDS = {
 LEAD_RATIO_MULTIPLE = 3.0
 EMPLOYEE_DROP_SHARE = 0.5
 EMPLOYEE_DROP_MIN_PEAK = 3
+REVENUE_DROP_SHARE = 0.5
 
 CATEGORY_LABELS = {
     "cafe_restaurant": ("cafés and restaurants", "food service"),

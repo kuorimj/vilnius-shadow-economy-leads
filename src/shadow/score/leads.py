@@ -12,6 +12,7 @@ from shadow.config import (
     EMPLOYEE_DROP_MIN_PEAK,
     EMPLOYEE_DROP_SHARE,
     LEAD_RATIO_MULTIPLE,
+    REVENUE_DROP_SHARE,
 )
 from shadow.match.places import activity_fits
 
@@ -31,7 +32,8 @@ CONFIRMED_PLACES = """
 INSURED = """
     SELECT company_code,
            max(insured) FILTER (WHERE month = %(sodra_month)s) AS latest,
-           max(insured) AS peak
+           max(insured) AS peak,
+           max(avg_wage) FILTER (WHERE month = %(sodra_month)s) AS avg_wage
     FROM staging.company_monthly
     WHERE snapshot_month = %(month)s AND company_code = ANY(%(codes)s)
     GROUP BY company_code
@@ -45,20 +47,20 @@ TYPICAL_INSURED = """
       AND c.activity_code LIKE ANY(%(patterns)s)
 """
 
-LATEST_REVENUE = """
-    SELECT DISTINCT ON (company_code) company_code, period_start, period_end, revenue
+REVENUE_HISTORY = """
+    SELECT DISTINCT ON (company_code, period_end) company_code, period_start, period_end, revenue
     FROM staging.company_revenue
-    WHERE snapshot_month = %(month)s AND company_code = ANY(%(codes)s)
+    WHERE snapshot_month = %(month)s AND company_code = ANY(%(codes)s) AND revenue IS NOT NULL
     ORDER BY company_code, period_end DESC, submitted_on DESC
 """
 
 INSERT_LEAD = """
     INSERT INTO mart.leads (
-        snapshot_month, rank, company_code, company_name, legal_form, category, places, reviews,
+        snapshot_month, rank, lead_type, company_code, company_name, legal_form, category, places, reviews,
         insured, typical_insured, revenue, revenue_year, reviews_per_employee, times_category_median,
         sodra_month, supporting_reasons, caveats, explanation
     ) VALUES (
-        %(snapshot_month)s, %(rank)s, %(company_code)s, %(company_name)s, %(legal_form)s, %(category)s,
+        %(snapshot_month)s, %(rank)s, %(lead_type)s, %(company_code)s, %(company_name)s, %(legal_form)s, %(category)s,
         %(places)s, %(reviews)s, %(insured)s, %(typical_insured)s, %(revenue)s, %(revenue_year)s,
         %(reviews_per_employee)s, %(times_category_median)s, %(sodra_month)s, %(supporting_reasons)s,
         %(caveats)s, %(explanation)s
@@ -80,8 +82,11 @@ class Company:
     years_in_business: int | None = None
     insured: int = 0
     peak_insured: int = 0
+    avg_wage: float | None = None
     revenue: float | None = None
     revenue_year: int | None = None
+    previous_revenue: float | None = None
+    previous_revenue_year: int | None = None
 
     @property
     def category(self) -> str:
@@ -100,6 +105,22 @@ class Company:
             return None
         return self.reviews / (self.revenue / 10_000)
 
+    @property
+    def revenue_dropped(self) -> bool:
+        if self.revenue is None or not self.previous_revenue or self.previous_revenue <= 0:
+            return False
+        return self.revenue <= self.previous_revenue * REVENUE_DROP_SHARE
+
+    @property
+    def wage_bill(self) -> float | None:
+        if not self.insured or not self.avg_wage:
+            return None
+        return self.insured * self.avg_wage * 12
+
+    @property
+    def below_wages(self) -> bool:
+        return self.revenue is not None and self.wage_bill is not None and self.revenue < self.wage_bill
+
 
 def annual_revenue(revenue: float, period_start: date, period_end: date) -> float:
     months = (period_end.year - period_start.year) * 12 + period_end.month - period_start.month + 1
@@ -110,6 +131,16 @@ def supporting_reasons(company: Company, snapshot_year: int, median_revenue_rati
     reasons = []
     if company.revenue is not None and company.revenue <= 0:
         reasons.append(f"declared no sales revenue in {company.revenue_year}")
+    if company.revenue_dropped:
+        reasons.append(
+            f"revenue fell from EUR {company.previous_revenue:,.0f} in {company.previous_revenue_year} "
+            f"to EUR {company.revenue:,.0f} in {company.revenue_year}"
+        )
+    if company.below_wages:
+        reasons.append(
+            f"{company.revenue_year} revenue of EUR {company.revenue:,.0f} is below the estimated yearly wage bill "
+            f"of EUR {company.wage_bill:,.0f} for {company.insured} insured employees"
+        )
     ratio = company.reviews_per_10k_revenue
     if ratio and median_revenue_ratio and ratio >= LEAD_RATIO_MULTIPLE * median_revenue_ratio:
         reasons.append(
@@ -138,6 +169,10 @@ def caveats(company: Company) -> list[str]:
         notes.append(f"reviews summed over {len(company.places)} places")
     if company.revenue_year:
         notes.append(f"revenue is from the {company.revenue_year} financial statements")
+    if company.revenue_dropped:
+        notes.append("a sharp revenue drop can mean the business moved to a related company")
+    if company.below_wages:
+        notes.append("wage bill estimated from the latest Sodra month, without employer contributions")
     else:
         notes.append("no financial statements found")
     return notes
@@ -149,6 +184,29 @@ def is_lead(company: Company, median_reviews: float, typical_insured: float, med
         and company.insured <= typical_insured
         and company.reviews_per_employee >= LEAD_RATIO_MULTIPLE * median_ratio
     )
+
+
+def is_sales_lead(company: Company, median_reviews: float) -> bool:
+    return company.reviews >= median_reviews and (company.revenue_dropped or company.below_wages)
+
+
+def sales_explanation(company: Company, median_reviews: float) -> str:
+    plural, _ = CATEGORY_LABELS[company.category]
+    places = f"{len(company.places)} place" + ("s" if len(company.places) > 1 else "")
+    busy = f"{company.reviews:,} Google reviews across {places} (median for {plural}: {median_reviews:,.0f})"
+    if company.revenue_dropped:
+        declared = (
+            f"declared revenue fell from EUR {company.previous_revenue:,.0f} in {company.previous_revenue_year} "
+            f"to EUR {company.revenue:,.0f} in {company.revenue_year}"
+        )
+        if company.below_wages:
+            declared += f", below its estimated wage bill of EUR {company.wage_bill:,.0f}"
+    else:
+        declared = (
+            f"declared {company.revenue_year} revenue of EUR {company.revenue:,.0f} is below "
+            f"its estimated wage bill of EUR {company.wage_bill:,.0f}"
+        )
+    return f"{busy}, but {declared}."
 
 
 def explanation(company: Company, median_reviews: float, typical_insured: float, ratio: float, sodra_month: date) -> str:
@@ -178,18 +236,22 @@ def build_leads(conn, month: str) -> list[dict]:
         if years:
             company.years_in_business = max(years, company.years_in_business or 0)
 
-    for code, latest, peak in conn.execute(
+    for code, latest, peak, avg_wage in conn.execute(
         INSURED, {"month": month, "sodra_month": sodra_month, "codes": list(companies)}
     ):
         companies[code].insured = latest or 0
         companies[code].peak_insured = peak or 0
+        companies[code].avg_wage = float(avg_wage) if avg_wage is not None else None
 
     for code, period_start, period_end, revenue in conn.execute(
-        LATEST_REVENUE, {"month": month, "codes": list(companies)}
+        REVENUE_HISTORY, {"month": month, "codes": list(companies)}
     ):
-        if revenue is not None:
-            companies[code].revenue = annual_revenue(float(revenue), period_start, period_end)
-            companies[code].revenue_year = period_end.year
+        company = companies[code]
+        yearly = annual_revenue(float(revenue), period_start, period_end)
+        if company.revenue_year is None:
+            company.revenue, company.revenue_year = yearly, period_end.year
+        elif company.previous_revenue_year is None:
+            company.previous_revenue, company.previous_revenue_year = yearly, period_end.year
 
     leads = []
     for category in CATEGORY_ACTIVITIES:
@@ -206,12 +268,19 @@ def build_leads(conn, month: str) -> list[dict]:
         ).fetchone()[0]
 
         for company in group:
-            if not is_lead(company, median_reviews, typical_insured, median_ratio):
+            ratio = company.reviews_per_employee / median_ratio if median_ratio else 0
+            if is_lead(company, median_reviews, typical_insured, median_ratio):
+                lead_type = "staff"
+                text = explanation(company, median_reviews, typical_insured, ratio, sodra_month)
+            elif is_sales_lead(company, median_reviews):
+                lead_type = "sales"
+                text = sales_explanation(company, median_reviews)
+            else:
                 continue
-            ratio = company.reviews_per_employee / median_ratio
             leads.append(
                 {
                     "snapshot_month": month,
+                    "lead_type": lead_type,
                     "company_code": company.code,
                     "company_name": company.name,
                     "legal_form": company.legal_form,
@@ -223,15 +292,15 @@ def build_leads(conn, month: str) -> list[dict]:
                     "revenue": round(company.revenue) if company.revenue is not None else None,
                     "revenue_year": company.revenue_year,
                     "reviews_per_employee": round(company.reviews_per_employee, 1),
-                    "times_category_median": round(ratio, 1),
+                    "times_category_median": round(ratio, 1) if lead_type == "staff" else None,
                     "sodra_month": sodra_month,
                     "supporting_reasons": supporting_reasons(company, int(month[:4]), median_revenue_ratio),
                     "caveats": caveats(company),
-                    "explanation": explanation(company, median_reviews, typical_insured, ratio, sodra_month),
+                    "explanation": text,
                 }
             )
 
-    leads.sort(key=lambda lead: lead["times_category_median"], reverse=True)
+    leads.sort(key=lambda lead: (lead["lead_type"] != "staff", -(lead["times_category_median"] or 0)))
     for rank, lead in enumerate(leads, start=1):
         lead["rank"] = rank
     return leads
@@ -251,7 +320,7 @@ def export_csv(leads: list[dict], month: str, data_dir: str = "data") -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"leads_{month}.csv"
     columns = [
-        "rank", "company_code", "company_name", "legal_form", "category", "places", "reviews",
+        "rank", "lead_type", "company_code", "company_name", "legal_form", "category", "places", "reviews",
         "insured", "typical_insured", "revenue", "revenue_year", "times_category_median",
         "supporting_reasons", "caveats", "explanation",
     ]
