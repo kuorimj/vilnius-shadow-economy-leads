@@ -1,10 +1,9 @@
 """Collect Google local results for every category x area, saving raw responses to disk."""
 
+import gzip
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-import gzip
-import json
 
 from shadow.config import AREAS, CATEGORIES
 from shadow.extract.oxylabs import fetch_google_local
@@ -51,8 +50,10 @@ def collect(month: str, categories: list[str], areas: list[str], data_dir: str =
                 },
                 "response": result.data,
             }
-            with gzip.open(out_file, "wt", encoding="utf-8") as f:
+            partial = out_file.with_name(out_file.name + ".partial")
+            with gzip.open(partial, "wt", encoding="utf-8") as f:
                 json.dump(record, f, ensure_ascii=False)
+            partial.replace(out_file)
             summary["collected"] += 1
             print(f"  saved {out_file.name} after {len(result.attempts)} attempt(s)", flush=True)
 

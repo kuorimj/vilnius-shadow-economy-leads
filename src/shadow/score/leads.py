@@ -169,12 +169,12 @@ def caveats(company: Company) -> list[str]:
         notes.append(f"reviews summed over {len(company.places)} places")
     if company.revenue_year:
         notes.append(f"revenue is from the {company.revenue_year} financial statements")
+    else:
+        notes.append("no financial statements found")
     if company.revenue_dropped:
         notes.append("a sharp revenue drop can mean the business moved to a related company")
     if company.below_wages:
         notes.append("wage bill estimated from the latest Sodra month, without employer contributions")
-    else:
-        notes.append("no financial statements found")
     return notes
 
 

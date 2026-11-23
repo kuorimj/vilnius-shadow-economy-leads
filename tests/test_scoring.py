@@ -100,8 +100,13 @@ def test_zero_revenue_is_a_supporting_reason():
 
 
 def test_caveats_say_which_year_the_revenue_is_from():
-    assert "revenue is from the 2024 financial statements" in caveats(company(revenue=1, revenue_year=2024))
-    assert "no financial statements found" in caveats(company())
+    with_revenue = caveats(company(revenue=1, revenue_year=2024))
+    assert "revenue is from the 2024 financial statements" in with_revenue
+    assert "no financial statements found" not in with_revenue
+
+    without_revenue = caveats(company())
+    assert "no financial statements found" in without_revenue
+    assert not any(note.startswith("revenue is from") for note in without_revenue)
 
 
 def darmelita(**overrides):

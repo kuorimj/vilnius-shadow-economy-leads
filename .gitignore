@@ -6,3 +6,4 @@ samples/
 data/declared/*/JAR_IREGISTRUOTI.csv
 data/declared/*/monthly-*.csv
 data/raw/**/*.json
+*.partial

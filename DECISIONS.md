@@ -46,7 +46,7 @@ Google's local results never say which company runs a place, and brand names rar
 
 - The unit is a **company**, since one company can run several places (their reviews are summed).
 - **Staff leads** (undeclared work): reviews at least the **median for the category**; declared employees no more than the **median Vilnius company with the same activity** (7 food service, 2 hair and beauty, 4 car repair); and **reviews per employee at least 3x the category median**. Without the staffing condition, big, properly staffed tourist restaurants (44 employees) ranked near the top; without the busyness condition, every quiet one-person business would.
-- **Sales leads** (undeclared sales): busy, and the declared figures **contradict each other**: revenue at most half the previous year's, or below the estimated wage bill (insured x average wage x 12).
+- **Sales leads** (undeclared sales): busy, and the declared figures **contradict each other**: revenue at most half the previous year's, or below the estimated wage bill (insured x average wage x 12). Sodra hides the average wage for companies with 1 to 3 insured, so the wage check covers only 60 of the 84 confirmed companies.
 - **Rejected:** reviews per euro of revenue as a lead rule. It flagged 10 new companies, mostly Old Town restaurants with 19 to 44 staff and steady revenue: tourists, not hidden sales.
 - **Supporting reasons**, shown but never creating a lead alone: low revenue for the reviews; employees fell by half from the 2026 peak; Google lists the business as older than its company; liquidation or bankruptcy. Thresholds live in `config.py`.
 - **Caveats** travel with each lead: reviews accumulate over years and include tourists; MB owners may work without being insured; staff or sales may sit in a related company; data lags.
@@ -54,5 +54,5 @@ Google's local results never say which company runs a place, and brand names rar
 
 ## Scope and next steps
 
-- **Cut for time:** the analyst UI. For now the results are a CSV file and the `mart.leads` table. Database loaders are verified by end-to-end runs, not automated integration tests.
-- **Next:** a simple analyst UI over `mart.leads` and `staging.google_coverage`; compare review counts month to month, so busyness means recent activity rather than lifetime totals; fill the 8 coverage gaps; the register's official list of late filers as a supporting reason; add the address register's coordinates as a distance signal for matching (it helps only companies registered where they operate); integration tests against Postgres; a monthly schedule.
+- **Cut for time:** the analyst UI. For now the results are a CSV file and the `mart.leads` table. Loaders have no tests of their own; CI covers them by running the whole pipeline on every pull request.
+- **Next:** a simple analyst UI over `mart.leads` and `staging.google_coverage`; compare review counts month to month, so busyness means recent activity rather than lifetime totals; fill the 8 coverage gaps; the register's official list of late filers as a supporting reason; add the address register's coordinates as a distance signal for matching (it helps only companies registered where they operate); integration tests per loader; a monthly schedule.
