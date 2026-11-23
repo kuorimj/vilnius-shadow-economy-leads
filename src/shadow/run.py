@@ -74,7 +74,11 @@ def main():
      
     print(f"Leads: {len(leads)} companies, written to mart.leads and {csv_path}")
     for lead in leads:
-        print(f"  {lead['rank']}. {lead['places']} ({lead['company_name']}): {lead['times_category_median']}x")   
+        if lead["lead_type"] == "staff":
+            signal = f"{lead['times_category_median']}x the category median of reviews per employee"
+        else:
+            signal = lead["explanation"]
+        print(f"  {lead['rank']}. [{lead['lead_type']}] {lead['places']} ({lead['company_name']}): {signal}")   
     
     return 0
 
