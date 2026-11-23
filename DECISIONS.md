@@ -15,22 +15,21 @@ The system has to run with one command on a clean machine, from a public reposit
 | Analyst output | CSV export plus the `mart.leads` table, queryable with SQL | Streamlit UI | Cut for now due to time: matching and scoring quality mattered more than an interface. A UI on top of `mart.leads` is the natural next step. |
 | Raw data for replay | Google pages gzipped unchanged; Vilnius-only extracts of the official files (original lines); 34 MB in Git | Parquet; Git LFS | Gzip keeps the source bytes identical, and live and replay read the same format. LFS would force reviewers to install extra tooling. |
 
-**Production path:** the same stages run under an orchestrator (Airflow/MWAA or Step Functions), raw pages go to S3 as gzipped JSON, processed tables to RDS or Parquet for Athena, all defined in Terraform.
+**Production path:** the same stages under an orchestrator (Airflow/MWAA or Step Functions), raw pages in S3, tables in RDS or Parquet on Athena, all in Terraform.
 
 ## Google data collection
 
 - One page-1 query per category (cafés/restaurants, hair/beauty, car repair) and Vilnius neighbourhood (the city's 21 official *seniūnijos*): 63 pages. City-wide queries rank prominent central places first; neighbourhood queries reach local businesses.
-- Requests fault intermittently (34% of attempts succeeded), so each query gets up to 5 attempts with backoff, every attempt is logged, and saved pages are skipped on re-runs.
+- Requests fault intermittently (34% of attempts succeeded): up to 5 attempts with backoff, every attempt logged, saved pages skipped on re-runs.
 - Raw pages are kept unchanged, duplicates included. Staging deduplicates by Google's place ID (CID) and keeps places inside Vilnius by coordinates.
-- Google serves at least two card layouts, so the parser handles both and is tested on real pages of each. Many car repair shops show no street address, only "N+ years in business", which is stored as its own field.
+- The parser handles both card layouts Google serves and is tested on real pages of each.
 
-**November 2026 snapshot:** 55 of 63 pages (87%), 855 listings, 736 unique places in Vilnius. 8 pages failed after 5 attempts each and are reported per run and in `staging.google_coverage`. Naujamiestis and Naujininkai cafés were retried separately: each added 15 to 17 places no other query found, so the remaining gaps are real blind spots.
+**November 2026 snapshot:** 55 of 63 pages (87%), 855 listings, 736 unique places in Vilnius. The 8 failed pages are reported per run and in `staging.google_coverage`. Two retried pages each added 15 to 17 places no other query found, so the remaining gaps are real blind spots.
 
 ## Declared data
 
 - Register and Sodra are joined by company code. Only companies with a Vilnius city address are loaded (85,893), so a Vilnius business registered elsewhere is missed.
-- Sodra includes each company's declared activity code (56.xx food service, 96.21/96.22 hair and beauty, 95.31 car repair), used for matching and for "typical staffing" baselines.
-- Sodra is two months behind: the latest month is September 2026, the Google data is from November.
+- Sodra adds each company's declared activity code (used for matching and staffing baselines). It is two months behind: September 2026.
 - **Revenue** comes from profit (loss) statements via the open data API (get.data.gov.lt), fetched only for the 84 confirmed companies and saved for replay. 78 have statements, up to 10 years back. The latest is 2025 for 49 and 2024 for 29, so revenue is one to two years old.
 
 ## Matching
@@ -38,7 +37,7 @@ The system has to run with one command on a clean machine, from a public reposit
 Google's local results never say which company runs a place, and brand names rarely equal legal names ("Public" is run by UAB "Asia Pacific"). Matching is therefore deliberately conservative.
 
 - **Rule:** the place's *distinctive* name (without legal forms, generic words like *autoservisas, kirpykla, kavinė*, and neighbourhood names) is at least 80% similar to one company's, **and** a second signal confirms it: the company's declared activity fits the category, or it is registered at the same street address.
-- **Address only confirms.** About 94 companies share a typical Google place's address (business centres, accountants), so an address alone decides nothing. A different address counts for nothing either: among confirmed matches with a street address on Google, 56% of companies are registered elsewhere.
+- **Address only confirms.** About 94 companies share a typical place's address (business centres, accountants), and 56% of confirmed companies are registered elsewhere, so an address neither decides nor rules out a match.
 - **Outcomes:** 87 confirmed, 67 possible, 6 ambiguous, 576 unmatched. Only confirmed matches can become leads; "unmatched" means "can't assess", not "suspicious".
 - **Rejected:** address-only matching; looser name thresholds (generic names like "Autoservisas" matched several unrelated companies); collecting websites (none in local results, and many small businesses have none).
 
@@ -57,7 +56,13 @@ Google's local results never say which company runs a place, and brand names rar
 - 16 checks between layers, each a SQL query with an allowed range set from the November baseline: row counts, freshness (pages fetched in the snapshot month, Sodra at most 3 months behind), nulls, and plausibility (confirmed match share 5 to 30%, revenue for 80% of confirmed companies).
 - A failed **error** check stops the run before scoring with a non-zero exit, so no lead list is published from broken data and CI fails. **Warnings** are only reported. All results are kept in `mart.quality_checks`.
 
+## History across months
+
+- Tables are keyed by `snapshot_month` and a run replaces only its month, so monthly facts accumulate (Sodra already holds nine months). Views give month-to-month changes in reviews and insured employees.
+- Companies and places get versioned dimensions (SCD type 2): a change of name, address, status or activity, or disappearing, closes the current row. Versions are rebuilt from all stored months each run, so re-runs and back-fills are idempotent.
+- With one Google month, every place has one version; the logic is tested on made-up months.
+
 ## Scope and next steps
 
 - **Cut for time:** the analyst UI. For now the results are a CSV file and the `mart.leads` table. Loaders have no tests of their own; CI covers them by running the whole pipeline on every pull request.
-- **Next:** a simple analyst UI over `mart.leads` and `staging.google_coverage`; compare review counts month to month, so busyness means recent activity rather than lifetime totals; fill the 8 coverage gaps; the register's official list of late filers as a supporting reason; add the address register's coordinates as a distance signal for matching (it helps only companies registered where they operate); integration tests per loader; a monthly schedule.
+- **Next:** a simple analyst UI over `mart.leads` and `staging.google_coverage`; from the December run, score busyness by reviews gained per month rather than lifetime totals; fill the 8 coverage gaps; the register's official list of late filers as a supporting reason; add the address register's coordinates as a distance signal for matching (it helps only companies registered where they operate); integration tests per loader; a monthly schedule.
