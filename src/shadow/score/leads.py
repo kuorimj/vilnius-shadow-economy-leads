@@ -327,7 +327,7 @@ def export_csv(leads: list[dict], month: str, data_dir: str = "data") -> Path:
         "supporting_reasons", "caveats", "explanation",
     ]
     with open(path, "w", encoding="utf-8-sig", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
+        writer = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore", lineterminator="\n")
         writer.writeheader()
         for lead in leads:
             reasons = "; ".join(lead["supporting_reasons"])
