@@ -8,6 +8,7 @@ from shadow.config import AREAS, CATEGORIES
 from shadow.extract.declared import download_declared, read_declared
 from shadow.extract.google_collect import collect, load_attempts, load_raw
 from shadow.extract.revenue import collect_revenue, read_revenue_raw, revenue_rows
+from shadow.history import load_history
 from shadow.load.coverage import load_coverage
 from shadow.load.declared import load_declared
 from shadow.load.google import load_google
@@ -53,11 +54,12 @@ def main():
 
         quality = run_checks(conn, args.month, INPUT_CHECKS, reset=True)
         failed = blocking(quality)
-        leads, csv_path = [], None
+        leads, csv_path, history = [], None, None
         if not failed:
             leads = load_leads(conn, args.month)
             csv_path = export_csv(leads, args.month)
             quality += run_checks(conn, args.month, OUTPUT_CHECKS)
+            history = load_history(conn)
 
     print(f"Coverage: {expected_pages - len(missing)} of {expected_pages} pages collected")
     for page in missing:
@@ -86,6 +88,11 @@ def main():
     if failed:
         print("Stopped before scoring: fix the failed error checks above. No lead list was written.")
         return 1
+
+    print(
+        f"History: {history['company_versions']} versions of {history['companies']} companies, "
+        f"{history['place_versions']} versions of {history['places']} places"
+    )
 
     print(f"Leads: {len(leads)} companies, written to mart.leads and {csv_path}")
     for lead in leads:
