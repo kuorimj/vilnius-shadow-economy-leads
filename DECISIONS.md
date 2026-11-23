@@ -11,7 +11,7 @@ The system has to run with one command on a clean machine, from a public reposit
 | Storage | Postgres 18 | SQL Server (my background) | SQL Server images are x86-only and need Microsoft's ODBC driver. Postgres has `pg_trgm` for fuzzy name matching. |
 | Infrastructure as code | `docker-compose.yml` and a Dockerfile | Terraform | No cloud resources to provision. Secrets live in a gitignored `.env`. |
 | Google collection | Oxylabs Web API, behind one `fetch_google_local(query)` function | Google Places API; my own scraper | The Places API limits how long most content may be cached, which conflicts with monthly history. Direct scraping conflicts with Google's terms, which the brief asks to respect. |
-| Declared data | Downloaded directly from Registrų centras (company register) and Sodra (monthly employer data) | Third-party company databases | Official, free, published regularly, no intermediary. |
+| Declared data | Downloaded directly from Registrų centras (company register, financial statements) and Sodra (monthly employer data) | Third-party company databases (e.g. Rekvizitai) | Official and free. Aggregators republish the same data and would need scraping. |
 | Analyst output | CSV export plus the `mart.leads` table, queryable with SQL | Streamlit UI | Cut for now due to time: matching and scoring quality mattered more than an interface. A UI on top of `mart.leads` is the natural next step. |
 | Raw data for replay | Google pages gzipped unchanged; Vilnius-only extracts of the official files (original lines); 34 MB in Git | Parquet; Git LFS | Gzip keeps the source bytes identical, and live and replay read the same format. LFS would force reviewers to install extra tooling. |
 
@@ -31,6 +31,7 @@ The system has to run with one command on a clean machine, from a public reposit
 - Register and Sodra are joined by company code. Only companies with a Vilnius city address are loaded (85,893), so a Vilnius business registered elsewhere is missed.
 - Sodra includes each company's declared activity code (56.xx food service, 96.21/96.22 hair and beauty, 95.31 car repair), used for matching and for "typical staffing" baselines.
 - Sodra is two months behind: the latest month is September 2026, the Google data is from November.
+- **Revenue** comes from profit (loss) statements via the open data API (get.data.gov.lt), fetched only for the 84 confirmed companies and saved for replay. 78 have statements, up to 10 years back. The latest is 2025 for 49 and 2024 for 29, so revenue is one to two years old.
 
 ## Matching
 
@@ -39,18 +40,19 @@ Google's local results never say which company runs a place, and brand names rar
 - **Rule:** the place's *distinctive* name (without legal forms, generic words like *autoservisas, kirpykla, kavinė*, and neighbourhood names) is at least 80% similar to one company's, **and** a second signal confirms it: the company's declared activity fits the category, or it is registered at the same street address.
 - **Address only confirms.** About 94 companies share a typical Google place's address (business centres, accountants), so an address alone decides nothing. A different address counts for nothing either: among confirmed matches with a street address on Google, 56% of companies are registered elsewhere.
 - **Outcomes:** 87 confirmed, 67 possible, 6 ambiguous, 576 unmatched. Only confirmed matches can become leads; "unmatched" means "can't assess", not "suspicious".
-- **Rejected:** address-only matching; looser name thresholds (generic names like "Autoservisas" matched several unrelated companies); collecting each place's website (local results carry no website links, it costs an extra request per place, and many small businesses have none).
+- **Rejected:** address-only matching; looser name thresholds (generic names like "Autoservisas" matched several unrelated companies); collecting websites (none in local results, and many small businesses have none).
 
 ## Scoring
 
 - The unit is a **company**, since one company can run several places (their reviews are summed).
-- A confirmed company is a lead when all three hold: its reviews are at least the **median for its category**; its declared employees are no more than the **median Vilnius company with the same activity** (7 food service, 2 hair and beauty, 4 car repair); and its **reviews per employee are at least 3x the category median**. Thresholds live in `config.py`.
-- Without the staffing condition, big, properly staffed tourist restaurants (44 employees) ranked near the top; without the busyness condition, every quiet one-person business would.
-- **Supporting reasons**, shown but never creating a lead alone: employees fell by half from the 2026 peak; Google lists the business as older than its company; liquidation or bankruptcy.
-- **Caveats** travel with each lead: reviews accumulate over years and include tourists; small partnership (MB) owners may work without being insured employees; staff may be employed by a sister company; Sodra's two-month lag.
-- **Result:** 7 leads from 84 confirmed companies.
+- **Staff leads** (undeclared work): reviews at least the **median for the category**; declared employees no more than the **median Vilnius company with the same activity** (7 food service, 2 hair and beauty, 4 car repair); and **reviews per employee at least 3x the category median**. Without the staffing condition, big, properly staffed tourist restaurants (44 employees) ranked near the top; without the busyness condition, every quiet one-person business would.
+- **Sales leads** (undeclared sales): busy, and the declared figures **contradict each other**: revenue at most half the previous year's, or below the estimated wage bill (insured x average wage x 12).
+- **Rejected:** reviews per euro of revenue as a lead rule. It flagged 10 new companies, mostly Old Town restaurants with 19 to 44 staff and steady revenue: tourists, not hidden sales.
+- **Supporting reasons**, shown but never creating a lead alone: low revenue for the reviews; employees fell by half from the 2026 peak; Google lists the business as older than its company; liquidation or bankruptcy. Thresholds live in `config.py`.
+- **Caveats** travel with each lead: reviews accumulate over years and include tourists; MB owners may work without being insured; staff or sales may sit in a related company; data lags.
+- **Result:** 8 leads from 84 confirmed companies: 7 staff, 1 sales. Revenue backs 3 staff leads and looks normal for 2.
 
 ## Scope and next steps
 
 - **Cut for time:** the analyst UI. For now the results are a CSV file and the `mart.leads` table. Database loaders are verified by end-to-end runs, not automated integration tests.
-- **Next:** a simple analyst UI over `mart.leads` and `staging.google_coverage`; compare review counts month to month, so busyness means recent activity rather than lifetime totals; fill the 8 coverage gaps; add the address register's coordinates as a distance signal for matching (it helps only companies registered where they operate); integration tests against Postgres; a monthly schedule.
+- **Next:** a simple analyst UI over `mart.leads` and `staging.google_coverage`; compare review counts month to month, so busyness means recent activity rather than lifetime totals; fill the 8 coverage gaps; the register's official list of late filers as a supporting reason; add the address register's coordinates as a distance signal for matching (it helps only companies registered where they operate); integration tests against Postgres; a monthly schedule.
