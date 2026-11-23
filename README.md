@@ -23,7 +23,7 @@ This starts Postgres, runs the pipeline in replay mode on the committed snapshot
 - the lead list to `data/output/leads_2026-11.csv`
 - all tables to the database (see [Data model](#data-model))
 
-The run ends with a summary: coverage, places, companies, match outcomes and the ranked leads.
+The run ends with a summary: coverage, places, companies, match outcomes, data quality checks and the ranked leads. If a blocking quality check fails, the run stops before scoring and exits with an error.
 
 To query the results while the database is running:
 
@@ -113,6 +113,7 @@ Sodra monthly ─────┘    staging.company_monthly                     
 | `staging` | `company_revenue` | Yearly sales revenue per confirmed company, full history |
 | `staging` | `place_matches` | Match outcome and evidence for every place |
 | `mart` | `leads` | The lead list |
+| `mart` | `quality_checks` | Result of every data quality check, per month |
 
 Every table carries `snapshot_month`, and each run replaces its month in one transaction, so re-runs are idempotent.
 
@@ -123,6 +124,7 @@ src/shadow/
   run.py              pipeline entry point (--month, --mode)
   snapshot.py         prepares a month's data for committing
   config.py           categories, neighbourhoods and all thresholds
+  quality.py          data quality checks between layers
   extract/            Oxylabs client, collector, Google parser, declared-data reader, revenue API client
   load/               loaders for Google data, coverage, declared data and revenue
   match/              name normalisation and place-to-company matching
@@ -146,5 +148,5 @@ spikes/               early probes of the Oxylabs endpoint
 
 `main` is protected: no direct pushes, including the owner's. Every change goes through a pull request, and merging is blocked until both CI checks pass:
 
-- `unit-tests`: the pytest suite (parser, matching, revenue, scoring, snapshot).
-- `replay`: `docker compose up` on the committed snapshot, which must reproduce `data/output/leads_2026-11.csv` exactly.
+- `unit-tests`: the pytest suite (parser, matching, revenue, scoring, quality checks, snapshot).
+- `replay`: `docker compose up` on the committed snapshot, which must pass the data quality checks and reproduce `data/output/leads_2026-11.csv` exactly.

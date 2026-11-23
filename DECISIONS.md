@@ -52,6 +52,11 @@ Google's local results never say which company runs a place, and brand names rar
 - **Caveats** travel with each lead: reviews accumulate over years and include tourists; MB owners may work without being insured; staff or sales may sit in a related company; data lags.
 - **Result:** 8 leads from 84 confirmed companies: 7 staff, 1 sales. Revenue backs 3 staff leads and looks normal for 2.
 
+## Data quality
+
+- 16 checks between layers, each a SQL query with an allowed range set from the November baseline: row counts, freshness (pages fetched in the snapshot month, Sodra at most 3 months behind), nulls, and plausibility (confirmed match share 5 to 30%, revenue for 80% of confirmed companies).
+- A failed **error** check stops the run before scoring with a non-zero exit, so no lead list is published from broken data and CI fails. **Warnings** are only reported. All results are kept in `mart.quality_checks`.
+
 ## Scope and next steps
 
 - **Cut for time:** the analyst UI. For now the results are a CSV file and the `mart.leads` table. Loaders have no tests of their own; CI covers them by running the whole pipeline on every pull request.
