@@ -117,7 +117,7 @@ Sodra monthly ─────┘    staging.company_monthly                     
 | `mart` | `company_versions`, `place_versions` | Every version of each company and place across months (SCD type 2) |
 | `mart` | `place_review_changes`, `company_insured_changes` | Views: month-to-month change in reviews and insured employees |
 
-Every table carries `snapshot_month`, and each run replaces its month in one transaction, so re-runs are idempotent and monthly snapshots accumulate. The version tables are rebuilt from all stored months on every run.
+Every table carries `snapshot_month`, a date holding the month's first day (`2026-11-01`), and each run replaces its month in one transaction, so re-runs are idempotent and monthly snapshots accumulate. The version tables are rebuilt from all stored months on every run.
 
 ## Project layout
 
