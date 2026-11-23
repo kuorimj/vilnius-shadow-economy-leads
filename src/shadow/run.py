@@ -7,10 +7,12 @@ import psycopg
 from shadow.config import AREAS, CATEGORIES
 from shadow.extract.declared import download_declared, read_declared
 from shadow.extract.google_collect import collect, load_attempts, load_raw
+from shadow.extract.revenue import collect_revenue, read_revenue_raw, revenue_rows
 from shadow.load.coverage import load_coverage
 from shadow.load.declared import load_declared
 from shadow.load.google import load_google
-from shadow.match.places import load_matches
+from shadow.load.revenue import load_revenue
+from shadow.match.places import confirmed_company_codes, load_matches
 from shadow.score.leads import export_csv, load_leads
 
 def parse_args():
@@ -43,6 +45,10 @@ def main():
         missing = load_coverage(conn, args.month, records, attempts)
         declared = load_declared(conn, args.month, companies, monthly)
         matches = load_matches(conn, args.month)
+        if args.mode == "live":
+            fetched = collect_revenue(args.month, confirmed_company_codes(conn, args.month))
+            print(f"Revenue: fetched {fetched['fetched']} companies, already had {fetched['already_had']}")
+        revenue = load_revenue(conn, args.month, revenue_rows(read_revenue_raw(args.month)))
         leads = load_leads(conn, args.month)
         csv_path = export_csv(leads, args.month)
 
@@ -63,6 +69,7 @@ def main():
     print(f"Matched {loaded['places']} places to companies:")
     for status in ("confirmed", "possible", "ambiguous", "unmatched"):
         print(f"  {status}: {matches[status]}")
+    print(f"Loaded {revenue['statements']} revenue statements for {revenue['companies']} confirmed companies")
 
      
     print(f"Leads: {len(leads)} companies, written to mart.leads and {csv_path}")
