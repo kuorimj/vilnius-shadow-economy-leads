@@ -50,14 +50,18 @@ To prepare a month for committing (compress pages, write Vilnius-only extracts o
 docker compose run --rm pipeline python -m shadow.snapshot --month 2026-12
 ```
 
-### Tests
+### Tests and checks
 
 ```
 python -m venv .venv
 # activate the virtual environment, then:
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 python -m pytest
+ruff check src tests
+mypy
 ```
+
+`requirements.txt` holds only what the pipeline needs to run (it is what the Docker image installs); `requirements-dev.txt` adds pytest, ruff and mypy.
 
 Parser tests run against real Google pages saved in `tests/fixtures/`, including both page layouts Google serves.
 
@@ -149,7 +153,8 @@ spikes/               early probes of the Oxylabs endpoint
 
 ## Development workflow
 
-`main` is protected: no direct pushes, including the owner's. Every change goes through a pull request, and merging is blocked until both CI checks pass:
+`main` is protected: no direct pushes, including the owner's. Every change goes through a pull request, and merging is blocked until all three CI checks pass:
 
+- `lint`: ruff (style, import order, likely bugs) and mypy (types).
 - `unit-tests`: the pytest suite (parser, matching, revenue, scoring, quality checks, history, snapshot).
 - `replay`: `docker compose up` on the committed snapshot, which must pass the data quality checks and reproduce `data/output/leads_2026-11.csv` exactly.

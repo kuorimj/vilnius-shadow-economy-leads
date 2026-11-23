@@ -1,13 +1,13 @@
 """Download and read the declared-activity sources: the company register (JAR) and Sodra."""
 
 import csv
+import gzip
 import io
 import re
 import zipfile
 from pathlib import Path
 
 import requests
-import gzip
 
 JAR_URL = "https://www.registrucentras.lt/aduomenys/?byla=JAR_IREGISTRUOTI.csv"
 SODRA_URL = "https://atvira.sodra.lt/imones/downloads/{year}/monthly-{year}.csv.zip"
@@ -57,12 +57,19 @@ def read_jar_vilnius(lines) -> dict[str, dict]:
     return companies
 
 
+def sodra_key(column: str) -> str:
+    match = SODRA_COLUMN.search(column)
+    if match is None:
+        raise ValueError(f"unexpected Sodra column header: {column!r}")
+    return match[1]
+
+
 def read_sodra(lines, company_codes: set[str]) -> list[dict]:
     reader = csv.reader(lines, delimiter=";")
-    header = [SODRA_COLUMN.search(column)[1] for column in next(reader)]
+    header = [sodra_key(column) for column in next(reader)]
     rows = []
     for values in reader:
-        row = dict(zip(header, values))
+        row = dict(zip(header, values, strict=True))
         if row["jarCode"] in company_codes:
             rows.append(
                 {

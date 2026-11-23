@@ -209,7 +209,9 @@ def sales_explanation(company: Company, median_reviews: float) -> str:
     return f"{busy}, but {declared}."
 
 
-def explanation(company: Company, median_reviews: float, typical_insured: float, ratio: float, sodra_month: date) -> str:
+def explanation(
+    company: Company, median_reviews: float, typical_insured: float, ratio: float, sodra_month: date
+) -> str:
     plural, activity = CATEGORY_LABELS[company.category]
     places = f"{len(company.places)} place" + ("s" if len(company.places) > 1 else "")
     return (
@@ -328,7 +330,6 @@ def export_csv(leads: list[dict], month: str, data_dir: str = "data") -> Path:
         writer = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
         writer.writeheader()
         for lead in leads:
-            writer.writerow(
-                {**lead, "supporting_reasons": "; ".join(lead["supporting_reasons"]), "caveats": "; ".join(lead["caveats"])}
-            )
+            reasons = "; ".join(lead["supporting_reasons"])
+            writer.writerow({**lead, "supporting_reasons": reasons, "caveats": "; ".join(lead["caveats"])})
     return path

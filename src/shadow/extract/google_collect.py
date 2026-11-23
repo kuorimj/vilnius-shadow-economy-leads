@@ -2,7 +2,8 @@
 
 import gzip
 import json
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 from shadow.config import AREAS, CATEGORIES
@@ -13,17 +14,24 @@ def raw_dir(month: str, data_dir: str = "data") -> Path:
     return Path(data_dir) / "raw" / month / "google_local"
 
 
-def collect(month: str, categories: list[str], areas: list[str], data_dir: str = "data") -> dict:
+@dataclass
+class CollectSummary:
+    collected: int = 0
+    already_had: int = 0
+    failed: list[str] = field(default_factory=list)
+
+
+def collect(month: str, categories: list[str], areas: list[str], data_dir: str = "data") -> CollectSummary:
     out_dir = raw_dir(month, data_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     attempts_log = out_dir / "_attempts.jsonl"
-    summary = {"collected": 0, "already_had": 0, "failed": []}
+    summary = CollectSummary()
 
     for category in categories:
         for area in areas:
             out_file = out_dir / f"{category}__{area}.json.gz"
             if out_file.exists():
-                summary["already_had"] += 1
+                summary.already_had += 1
                 continue
 
             query = f"{CATEGORIES[category]} {AREAS[area]} Vilnius"
@@ -36,7 +44,7 @@ def collect(month: str, categories: list[str], areas: list[str], data_dir: str =
                     log.write(json.dumps(line, ensure_ascii=False) + "\n")
 
             if result.data is None:
-                summary["failed"].append(query)
+                summary.failed.append(query)
                 print(f"  failed after {len(result.attempts)} attempt(s)", flush=True)
                 continue
 
@@ -45,7 +53,7 @@ def collect(month: str, categories: list[str], areas: list[str], data_dir: str =
                     "category": category,
                     "area": area,
                     "query": query,
-                    "fetched_at": datetime.now(timezone.utc).isoformat(),
+                    "fetched_at": datetime.now(UTC).isoformat(),
                     "attempts": len(result.attempts),
                 },
                 "response": result.data,
@@ -54,7 +62,7 @@ def collect(month: str, categories: list[str], areas: list[str], data_dir: str =
             with gzip.open(partial, "wt", encoding="utf-8") as f:
                 json.dump(record, f, ensure_ascii=False)
             partial.replace(out_file)
-            summary["collected"] += 1
+            summary.collected += 1
             print(f"  saved {out_file.name} after {len(result.attempts)} attempt(s)", flush=True)
 
     return summary

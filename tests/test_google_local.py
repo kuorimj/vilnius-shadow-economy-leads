@@ -78,7 +78,8 @@ def test_layout_b_card():
 
 
 def test_layout_b_keeps_branches_apart():
-    branches = [listing for listing in load("google_local_layout_b_kavine_zirmunai.json") if listing.name == "Etno Dvaras"]
+    listings = load("google_local_layout_b_kavine_zirmunai.json")
+    branches = [listing for listing in listings if listing.name == "Etno Dvaras"]
     assert len({branch.cid for branch in branches}) == 2
     assert {branch.address for branch in branches} == {"Šiaurės miestelis", "Pilies g. 16"}
     main = next(branch for branch in branches if branch.address == "Pilies g. 16")

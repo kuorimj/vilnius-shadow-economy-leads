@@ -6,7 +6,7 @@ current version. Versions are rebuilt from every stored month on each run, so re
 or back-filling a month always gives the same result.
 """
 
-from itertools import groupby
+from itertools import groupby, pairwise
 
 from psycopg.rows import dict_row
 
@@ -19,7 +19,7 @@ PLACE_SNAPSHOTS = f"SELECT snapshot_month, cid, {', '.join(PLACE_ATTRIBUTES)} FR
 
 def versions(snapshots: list[dict], key: str, attributes: tuple[str, ...]) -> list[dict]:
     months = sorted({row["snapshot_month"] for row in snapshots})
-    next_month = dict(zip(months, months[1:]))
+    next_month = dict(pairwise(months))
     ordered = sorted(snapshots, key=lambda row: (row[key], row["snapshot_month"]))
 
     result = []
@@ -40,6 +40,7 @@ def versions(snapshots: list[dict], key: str, attributes: tuple[str, ...]) -> li
             if current is None:
                 current = {key: entity, **values, "valid_from": month, "valid_to": None}
             last_seen = month
+        assert current is not None and last_seen is not None  # every group has at least one row
         if last_seen != months[-1]:
             current["valid_to"] = next_month[last_seen]
         result.append(current)

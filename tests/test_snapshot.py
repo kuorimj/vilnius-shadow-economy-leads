@@ -1,5 +1,4 @@
 import gzip
-import json
 
 from shadow.extract.declared import declared_dir, read_declared
 from shadow.extract.google_collect import load_raw, raw_dir
