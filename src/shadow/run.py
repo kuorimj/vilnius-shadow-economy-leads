@@ -13,6 +13,7 @@ from shadow.load.declared import load_declared
 from shadow.load.google import load_google
 from shadow.load.revenue import load_revenue
 from shadow.match.places import confirmed_company_codes, load_matches
+from shadow.quality import INPUT_CHECKS, OUTPUT_CHECKS, blocking, describe, run_checks
 from shadow.score.leads import export_csv, load_leads
 
 def parse_args():
@@ -49,8 +50,14 @@ def main():
             fetched = collect_revenue(args.month, confirmed_company_codes(conn, args.month))
             print(f"Revenue: fetched {fetched['fetched']} companies, already had {fetched['already_had']}")
         revenue = load_revenue(conn, args.month, revenue_rows(read_revenue_raw(args.month)))
-        leads = load_leads(conn, args.month)
-        csv_path = export_csv(leads, args.month)
+
+        quality = run_checks(conn, args.month, INPUT_CHECKS, reset=True)
+        failed = blocking(quality)
+        leads, csv_path = [], None
+        if not failed:
+            leads = load_leads(conn, args.month)
+            csv_path = export_csv(leads, args.month)
+            quality += run_checks(conn, args.month, OUTPUT_CHECKS)
 
     print(f"Coverage: {expected_pages - len(missing)} of {expected_pages} pages collected")
     for page in missing:
@@ -71,17 +78,24 @@ def main():
         print(f"  {status}: {matches[status]}")
     print(f"Loaded {revenue['statements']} revenue statements for {revenue['companies']} confirmed companies")
 
-     
+    passed = sum(r["passed"] for r in quality)
+    print(f"Quality checks: {passed} of {len(quality)} passed, results in mart.quality_checks")
+    for result in quality:
+        if not result["passed"]:
+            print(f"  {result['severity'].upper()}: {describe(result)}")
+    if failed:
+        print("Stopped before scoring: fix the failed error checks above. No lead list was written.")
+        return 1
+
     print(f"Leads: {len(leads)} companies, written to mart.leads and {csv_path}")
     for lead in leads:
         if lead["lead_type"] == "staff":
             signal = f"{lead['times_category_median']}x the category median of reviews per employee"
         else:
             signal = lead["explanation"]
-        print(f"  {lead['rank']}. [{lead['lead_type']}] {lead['places']} ({lead['company_name']}): {signal}")   
-    
-    return 0
+        print(f"  {lead['rank']}. [{lead['lead_type']}] {lead['places']} ({lead['company_name']}): {signal}")
 
+    return 0
 
 
 if __name__ == "__main__":
