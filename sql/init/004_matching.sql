@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS staging.place_matches (
-    snapshot_month   text         NOT NULL,
+    snapshot_month   month_start  NOT NULL,
     cid              text         NOT NULL,
     match_status     text         NOT NULL CHECK (match_status IN ('confirmed', 'possible', 'ambiguous', 'unmatched')),
     company_code     text,

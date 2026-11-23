@@ -220,7 +220,7 @@ def explanation(company: Company, median_reviews: float, typical_insured: float,
     )
 
 
-def build_leads(conn, month: str) -> list[dict]:
+def build_leads(conn, month: date) -> list[dict]:
     sodra_month = conn.execute(
         "SELECT max(month) FROM staging.company_monthly WHERE snapshot_month = %s", (month,)
     ).fetchone()[0]
@@ -294,7 +294,7 @@ def build_leads(conn, month: str) -> list[dict]:
                     "reviews_per_employee": round(company.reviews_per_employee, 1),
                     "times_category_median": round(ratio, 1) if lead_type == "staff" else None,
                     "sodra_month": sodra_month,
-                    "supporting_reasons": supporting_reasons(company, int(month[:4]), median_revenue_ratio),
+                    "supporting_reasons": supporting_reasons(company, month.year, median_revenue_ratio),
                     "caveats": caveats(company),
                     "explanation": text,
                 }
@@ -306,7 +306,7 @@ def build_leads(conn, month: str) -> list[dict]:
     return leads
 
 
-def load_leads(conn, month: str) -> list[dict]:
+def load_leads(conn, month: date) -> list[dict]:
     leads = build_leads(conn, month)
     with conn.transaction():
         conn.execute("DELETE FROM mart.leads WHERE snapshot_month = %s", (month,))

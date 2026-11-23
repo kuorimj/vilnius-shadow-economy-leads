@@ -1,9 +1,11 @@
 """Load annual sales revenue per company into staging."""
 
+from datetime import date
+
 COLUMNS = ("snapshot_month", "company_code", "period_start", "period_end", "submitted_on", "revenue")
 
 
-def load_revenue(conn, month: str, rows: list[dict]) -> dict:
+def load_revenue(conn, month: date, rows: list[dict]) -> dict:
     with conn.transaction():
         conn.execute("DELETE FROM staging.company_revenue WHERE snapshot_month = %s", (month,))
         with conn.cursor() as cur:

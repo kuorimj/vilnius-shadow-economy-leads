@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS staging.company_revenue (
-    snapshot_month  text           NOT NULL,
+    snapshot_month  month_start    NOT NULL,
     company_code    text           NOT NULL,
     period_start    date           NOT NULL,
     period_end      date           NOT NULL,

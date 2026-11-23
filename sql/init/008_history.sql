@@ -7,8 +7,8 @@ CREATE TABLE IF NOT EXISTS mart.company_versions (
     address         text,
     status          text,
     activity_code   text,
-    valid_from      text  NOT NULL,
-    valid_to        text,
+    valid_from      month_start NOT NULL,
+    valid_to        month_start,
     PRIMARY KEY (company_code, valid_from)
 );
 
@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS mart.place_versions (
     address         text,
     google_category text,
     price_band      text,
-    valid_from      text  NOT NULL,
-    valid_to        text,
+    valid_from      month_start NOT NULL,
+    valid_to        month_start,
     PRIMARY KEY (cid, valid_from)
 );
 

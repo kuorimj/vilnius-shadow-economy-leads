@@ -1,6 +1,7 @@
 """Link Google places to registered companies, with an explicit confidence level."""
 
 from dataclasses import dataclass
+from datetime import date
 
 from shadow.config import CATEGORY_ACTIVITIES
 from shadow.match.names import distinctive_name, street_key
@@ -55,7 +56,7 @@ def decide(candidates: list[Candidate]) -> tuple[str, Candidate | None]:
     return "ambiguous", None
 
 
-def load_matches(conn, month: str) -> dict[str, int]:
+def load_matches(conn, month: date) -> dict[str, int]:
     places = conn.execute(
         "SELECT cid, name, address, categories FROM staging.google_places WHERE snapshot_month = %s",
         (month,),
@@ -116,7 +117,7 @@ def load_matches(conn, month: str) -> dict[str, int]:
     return counts
 
 
-def confirmed_company_codes(conn, month: str) -> list[str]:
+def confirmed_company_codes(conn, month: date) -> list[str]:
     rows = conn.execute(
         "SELECT DISTINCT company_code FROM staging.place_matches "
         "WHERE snapshot_month = %s AND match_status = 'confirmed' ORDER BY company_code",

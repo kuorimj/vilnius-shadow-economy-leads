@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS raw.google_listings (
-    snapshot_month  text             NOT NULL,
+    snapshot_month  month_start      NOT NULL,
     category        text             NOT NULL,
     area            text             NOT NULL,
     query           text             NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS raw.google_listings (
 );
 
 CREATE TABLE IF NOT EXISTS staging.google_places (
-    snapshot_month  text             NOT NULL,
+    snapshot_month  month_start      NOT NULL,
     cid             text             NOT NULL,
     google_id       text             NOT NULL,
     name            text             NOT NULL,
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS staging.google_places (
 );
 
 CREATE TABLE IF NOT EXISTS staging.google_coverage (
-    snapshot_month  text        NOT NULL,
+    snapshot_month  month_start NOT NULL,
     category        text        NOT NULL,
     area            text        NOT NULL,
     collected       boolean     NOT NULL,

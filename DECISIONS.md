@@ -58,7 +58,7 @@ Google's local results never say which company runs a place, and brand names rar
 
 ## History across months
 
-- Tables are keyed by `snapshot_month` and a run replaces only its month, so monthly facts accumulate (Sodra already holds nine months). Views give month-to-month changes in reviews and insured employees.
+- Tables are keyed by `snapshot_month`, stored as a date (the month's first day, enforced by a `month_start` domain), and a run replaces only its month, so monthly facts accumulate (Sodra already holds nine months). Views give month-to-month changes in reviews and insured employees.
 - Companies and places get versioned dimensions (SCD type 2): a change of name, address, status or activity, or disappearing, closes the current row. Versions are rebuilt from all stored months each run, so re-runs and back-fills are idempotent.
 - With one Google month, every place has one version; the logic is tested on made-up months.
 

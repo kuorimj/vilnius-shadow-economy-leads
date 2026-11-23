@@ -14,12 +14,13 @@ from shadow.load.declared import load_declared
 from shadow.load.google import load_google
 from shadow.load.revenue import load_revenue
 from shadow.match.places import confirmed_company_codes, load_matches
+from shadow.months import month_arg, month_start
 from shadow.quality import INPUT_CHECKS, OUTPUT_CHECKS, blocking, describe, run_checks
 from shadow.score.leads import export_csv, load_leads
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Shadow economy lead pipeline")
-    parser.add_argument("--month", required=True, help="Snapshot month, format YYYY-MM")
+    parser.add_argument("--month", required=True, type=month_arg, help="Snapshot month, format YYYY-MM")
     parser.add_argument("--mode", choices=["live", "replay"], default="replay")
     parser.add_argument("--categories", nargs="+", choices=list(CATEGORIES), default=list(CATEGORIES))
     parser.add_argument("--areas", nargs="+", choices=list(AREAS), default=list(AREAS))
@@ -41,24 +42,25 @@ def main():
     attempts = load_attempts(args.month)
     companies, monthly = read_declared(args.month)
     expected_pages = len(CATEGORIES) * len(AREAS)
+    snapshot = month_start(args.month)
 
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
-        loaded = load_google(conn, args.month, records)
-        missing = load_coverage(conn, args.month, records, attempts)
-        declared = load_declared(conn, args.month, companies, monthly)
-        matches = load_matches(conn, args.month)
+        loaded = load_google(conn, snapshot, records)
+        missing = load_coverage(conn, snapshot, records, attempts)
+        declared = load_declared(conn, snapshot, companies, monthly)
+        matches = load_matches(conn, snapshot)
         if args.mode == "live":
-            fetched = collect_revenue(args.month, confirmed_company_codes(conn, args.month))
+            fetched = collect_revenue(args.month, confirmed_company_codes(conn, snapshot))
             print(f"Revenue: fetched {fetched['fetched']} companies, already had {fetched['already_had']}")
-        revenue = load_revenue(conn, args.month, revenue_rows(read_revenue_raw(args.month)))
+        revenue = load_revenue(conn, snapshot, revenue_rows(read_revenue_raw(args.month)))
 
-        quality = run_checks(conn, args.month, INPUT_CHECKS, reset=True)
+        quality = run_checks(conn, snapshot, INPUT_CHECKS, reset=True)
         failed = blocking(quality)
         leads, csv_path, history = [], None, None
         if not failed:
-            leads = load_leads(conn, args.month)
+            leads = load_leads(conn, snapshot)
             csv_path = export_csv(leads, args.month)
-            quality += run_checks(conn, args.month, OUTPUT_CHECKS)
+            quality += run_checks(conn, snapshot, OUTPUT_CHECKS)
             history = load_history(conn)
 
     print(f"Coverage: {expected_pages - len(missing)} of {expected_pages} pages collected")

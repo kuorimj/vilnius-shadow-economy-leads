@@ -1,6 +1,7 @@
 """Record which category x neighbourhood pages were collected for a month."""
 
 from collections import Counter
+from datetime import date
 
 from shadow.config import AREAS, CATEGORIES
 from shadow.extract.google_local import html_from_response, parse_listings
@@ -14,7 +15,7 @@ INSERT_COVERAGE = """
 """
 
 
-def coverage_rows(month: str, records: list[dict], attempts: list[dict]) -> list[dict]:
+def coverage_rows(month: date, records: list[dict], attempts: list[dict]) -> list[dict]:
     pages = {(r["meta"]["category"], r["meta"]["area"]): r for r in records}
     attempt_counts = Counter((a["category"], a["area"]) for a in attempts)
 
@@ -36,7 +37,7 @@ def coverage_rows(month: str, records: list[dict], attempts: list[dict]) -> list
     return rows
 
 
-def load_coverage(conn, month: str, records: list[dict], attempts: list[dict]) -> list[dict]:
+def load_coverage(conn, month: date, records: list[dict], attempts: list[dict]) -> list[dict]:
     rows = coverage_rows(month, records, attempts)
     with conn.transaction():
         conn.execute("DELETE FROM staging.google_coverage WHERE snapshot_month = %s", (month,))
