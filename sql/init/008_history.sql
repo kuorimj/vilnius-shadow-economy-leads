@@ -1,25 +1,25 @@
 -- Versions of each company and place across monthly snapshots (slowly changing dimension, type 2).
 -- valid_from is the first month a version applied, valid_to the first month it no longer did.
 CREATE TABLE IF NOT EXISTS mart.company_versions (
-    company_code   text         NOT NULL,
-    name           text         NOT NULL,
-    legal_form     text,
-    address        text,
-    status         text,
-    activity_code  text,
-    valid_from     month_start  NOT NULL,
-    valid_to       month_start,
+    company_code    text  NOT NULL,
+    name            text  NOT NULL,
+    legal_form      text,
+    address         text,
+    status          text,
+    activity_code   text,
+    valid_from      month_start NOT NULL,
+    valid_to        month_start,
     PRIMARY KEY (company_code, valid_from)
 );
 
 CREATE TABLE IF NOT EXISTS mart.place_versions (
-    cid              text         NOT NULL,
-    name             text         NOT NULL,
-    address          text,
-    google_category  text,
-    price_band       text,
-    valid_from       month_start  NOT NULL,
-    valid_to         month_start,
+    cid             text  NOT NULL,
+    name            text  NOT NULL,
+    address         text,
+    google_category text,
+    price_band      text,
+    valid_from      month_start NOT NULL,
+    valid_to        month_start,
     PRIMARY KEY (cid, valid_from)
 );
 
