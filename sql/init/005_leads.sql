@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS mart.leads (
     legal_form            text,
     category              text           NOT NULL,
     places                text           NOT NULL,
+    place_ids             text[]         NOT NULL,
     reviews               integer        NOT NULL,
     insured               integer        NOT NULL,
     typical_insured       numeric(6, 1)  NOT NULL,

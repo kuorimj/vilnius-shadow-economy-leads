@@ -96,6 +96,7 @@ Sodra monthly ─────┘    staging.company_monthly                     
 | `lead_type` | `staff` (undeclared work) or `sales` (undeclared sales) |
 | `company_code`, `company_name`, `legal_form` | From the company register |
 | `places` | The company's Google places |
+| `google_maps` | A Google Maps link for each place, in the same order |
 | `reviews` | Google reviews across those places |
 | `insured` | Insured employees in the latest Sodra month |
 | `typical_insured` | Median for Vilnius companies with the same declared activity |
@@ -117,11 +118,66 @@ Sodra monthly ─────┘    staging.company_monthly                     
 | `staging` | `company_revenue` | Yearly sales revenue per confirmed company, full history |
 | `staging` | `place_matches` | Match outcome and evidence for every place |
 | `mart` | `leads` | The lead list |
+| `mart` | `company_scores` | Every assessed company with its scores, flagged or not |
+| `mart` | `lead_evidence` | View: each lead's Google listing, match evidence and official records |
+| `mart` | `category_summary` | View: places, matches, assessed companies and share flagged per category |
+| `mart` | `lead_changes` | View: new, repeat and dropped leads compared with the previous month |
 | `mart` | `quality_checks` | Result of every data quality check, per month |
 | `mart` | `company_versions`, `place_versions` | Every version of each company and place across months (SCD type 2) |
 | `mart` | `place_review_changes`, `company_insured_changes` | Views: month-to-month change in reviews and insured employees |
 
 Every table carries `snapshot_month`, a date holding the month's first day (`2026-11-01`), and each run replaces its month in one transaction, so re-runs are idempotent and monthly snapshots accumulate. The version tables are rebuilt from all stored months on every run.
+
+## Ask your own questions
+
+Everything stays in Postgres after a run, so an analyst can query it without re-running the pipeline. Start the database with `docker compose up -d db`, then open a SQL prompt with `docker compose exec db psql -U leads -d leads` and try:
+
+Which categories have the highest share of flagged businesses?
+
+```sql
+SELECT category, assessed_companies, leads, share_flagged
+FROM mart.category_summary
+WHERE snapshot_month = '2026-11-01'
+ORDER BY share_flagged DESC;
+```
+
+What is a lead based on: which Google listing, why it was matched, and which official records?
+
+```sql
+SELECT rank, place_name, google_maps, name_similarity, activity_fits, same_address,
+       registered_address, insured, sodra_month, revenue, revenue_period_end
+FROM mart.lead_evidence
+ORDER BY rank;
+```
+
+Which companies came close but were not flagged, and why?
+
+```sql
+SELECT company_name, category, reviews, insured, typical_insured, times_category_median
+FROM mart.company_scores
+WHERE lead_type IS NULL
+ORDER BY times_category_median DESC
+LIMIT 10;
+```
+
+Which leads are new this month, and which dropped off?
+
+```sql
+SELECT company_name, category, change, previous_month
+FROM mart.lead_changes
+WHERE snapshot_month = '2026-11-01' AND change IS NOT NULL;
+```
+
+Which places have a plausible company but were not confirmed (candidates for manual review)?
+
+```sql
+SELECT p.name, p.address, m.company_code, c.name AS company, m.name_similarity
+FROM staging.place_matches m
+JOIN staging.google_places p USING (snapshot_month, cid)
+JOIN staging.companies c USING (snapshot_month, company_code)
+WHERE m.match_status = 'possible'
+ORDER BY m.name_similarity DESC;
+```
 
 ## Limitations: where it can be wrong
 

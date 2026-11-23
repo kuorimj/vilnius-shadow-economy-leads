@@ -18,10 +18,11 @@ from shadow.match.places import activity_fits
 
 NORMAL_STATUS = "Teisinis stat neįregistruotas"
 SMALL_PARTNERSHIP = "Mažoji bendrija"
+GOOGLE_MAPS = "https://www.google.com/maps?cid={cid}"
 
 CONFIRMED_PLACES = """
     SELECT c.company_code, c.name, c.legal_form, c.registered_on, c.status, c.activity_code,
-           p.name, p.categories, coalesce(p.reviews_count, 0), p.years_in_business
+           p.cid, p.name, p.categories, coalesce(p.reviews_count, 0), p.years_in_business
     FROM staging.place_matches m
     JOIN staging.google_places p USING (snapshot_month, cid)
     JOIN staging.companies c USING (snapshot_month, company_code)
@@ -56,14 +57,25 @@ REVENUE_HISTORY = """
 
 INSERT_LEAD = """
     INSERT INTO mart.leads (
-        snapshot_month, rank, lead_type, company_code, company_name, legal_form, category, places, reviews,
+        snapshot_month, rank, lead_type, company_code, company_name, legal_form, category, places, place_ids, reviews,
         insured, typical_insured, revenue, revenue_year, reviews_per_employee, times_category_median,
         sodra_month, supporting_reasons, caveats, explanation
     ) VALUES (
         %(snapshot_month)s, %(rank)s, %(lead_type)s, %(company_code)s, %(company_name)s, %(legal_form)s, %(category)s,
-        %(places)s, %(reviews)s, %(insured)s, %(typical_insured)s, %(revenue)s, %(revenue_year)s,
+        %(places)s, %(place_ids)s, %(reviews)s, %(insured)s, %(typical_insured)s, %(revenue)s, %(revenue_year)s,
         %(reviews_per_employee)s, %(times_category_median)s, %(sodra_month)s, %(supporting_reasons)s,
         %(caveats)s, %(explanation)s
+    )
+"""
+
+INSERT_SCORE = """
+    INSERT INTO mart.company_scores (
+        snapshot_month, company_code, company_name, category, places, reviews, insured, typical_insured,
+        reviews_per_employee, times_category_median, revenue, revenue_year, revenue_dropped, below_wages, lead_type
+    ) VALUES (
+        %(snapshot_month)s, %(company_code)s, %(company_name)s, %(category)s, %(places)s, %(reviews)s,
+        %(insured)s, %(typical_insured)s, %(reviews_per_employee)s, %(times_category_median)s, %(revenue)s,
+        %(revenue_year)s, %(revenue_dropped)s, %(below_wages)s, %(lead_type)s
     )
 """
 
@@ -77,6 +89,7 @@ class Company:
     status: str | None
     activity_code: str | None
     places: list[str] = field(default_factory=list)
+    place_ids: list[str] = field(default_factory=list)
     place_categories: set[str] = field(default_factory=set)
     reviews: int = 0
     years_in_business: int | None = None
@@ -222,17 +235,18 @@ def explanation(
     )
 
 
-def build_leads(conn, month: date) -> list[dict]:
+def build_leads(conn, month: date) -> tuple[list[dict], list[dict]]:
     sodra_month = conn.execute(
         "SELECT max(month) FROM staging.company_monthly WHERE snapshot_month = %s", (month,)
     ).fetchone()[0]
 
     companies: dict[str, Company] = {}
-    for code, name, form, registered, status, activity, place, categories, reviews, years in conn.execute(
+    for code, name, form, registered, status, activity, cid, place, categories, reviews, years in conn.execute(
         CONFIRMED_PLACES, {"month": month}
     ):
         company = companies.setdefault(code, Company(code, name, form, registered, status, activity))
         company.places.append(place)
+        company.place_ids.append(cid)
         company.place_categories.update(categories)
         company.reviews += reviews
         if years:
@@ -255,7 +269,7 @@ def build_leads(conn, month: date) -> list[dict]:
         elif company.previous_revenue_year is None:
             company.previous_revenue, company.previous_revenue_year = yearly, period_end.year
 
-    leads = []
+    leads, scores = [], []
     for category in CATEGORY_ACTIVITIES:
         group = [c for c in companies.values() if c.category == category]
         if not group:
@@ -271,13 +285,34 @@ def build_leads(conn, month: date) -> list[dict]:
 
         for company in group:
             ratio = company.reviews_per_employee / median_ratio if median_ratio else 0
+            lead_type: str | None = None
             if is_lead(company, median_reviews, typical_insured, median_ratio):
                 lead_type = "staff"
                 text = explanation(company, median_reviews, typical_insured, ratio, sodra_month)
             elif is_sales_lead(company, median_reviews):
                 lead_type = "sales"
                 text = sales_explanation(company, median_reviews)
-            else:
+            revenue = round(company.revenue) if company.revenue is not None else None
+            scores.append(
+                {
+                    "snapshot_month": month,
+                    "company_code": company.code,
+                    "company_name": company.name,
+                    "category": category,
+                    "places": len(company.places),
+                    "reviews": company.reviews,
+                    "insured": company.insured,
+                    "typical_insured": typical_insured,
+                    "reviews_per_employee": round(company.reviews_per_employee, 1),
+                    "times_category_median": round(ratio, 1),
+                    "revenue": revenue,
+                    "revenue_year": company.revenue_year,
+                    "revenue_dropped": company.revenue_dropped,
+                    "below_wages": company.below_wages,
+                    "lead_type": lead_type,
+                }
+            )
+            if lead_type is None:
                 continue
             leads.append(
                 {
@@ -288,10 +323,12 @@ def build_leads(conn, month: date) -> list[dict]:
                     "legal_form": company.legal_form,
                     "category": category,
                     "places": " / ".join(company.places),
+                    "place_ids": company.place_ids,
+                    "google_maps": " / ".join(GOOGLE_MAPS.format(cid=cid) for cid in company.place_ids),
                     "reviews": company.reviews,
                     "insured": company.insured,
                     "typical_insured": typical_insured,
-                    "revenue": round(company.revenue) if company.revenue is not None else None,
+                    "revenue": revenue,
                     "revenue_year": company.revenue_year,
                     "reviews_per_employee": round(company.reviews_per_employee, 1),
                     "times_category_median": round(ratio, 1) if lead_type == "staff" else None,
@@ -305,15 +342,18 @@ def build_leads(conn, month: date) -> list[dict]:
     leads.sort(key=lambda lead: (lead["lead_type"] != "staff", -(lead["times_category_median"] or 0)))
     for rank, lead in enumerate(leads, start=1):
         lead["rank"] = rank
-    return leads
+    scores.sort(key=lambda score: score["company_code"])
+    return leads, scores
 
 
 def load_leads(conn, month: date) -> list[dict]:
-    leads = build_leads(conn, month)
+    leads, scores = build_leads(conn, month)
     with conn.transaction():
         conn.execute("DELETE FROM mart.leads WHERE snapshot_month = %s", (month,))
+        conn.execute("DELETE FROM mart.company_scores WHERE snapshot_month = %s", (month,))
         with conn.cursor() as cur:
             cur.executemany(INSERT_LEAD, leads)
+            cur.executemany(INSERT_SCORE, scores)
     return leads
 
 
@@ -322,7 +362,8 @@ def export_csv(leads: list[dict], month: str, data_dir: str = "data") -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"leads_{month}.csv"
     columns = [
-        "rank", "lead_type", "company_code", "company_name", "legal_form", "category", "places", "reviews",
+        "rank", "lead_type", "company_code", "company_name", "legal_form", "category", "places", "google_maps",
+        "reviews",
         "insured", "typical_insured", "revenue", "revenue_year", "times_category_median",
         "supporting_reasons", "caveats", "explanation",
     ]
