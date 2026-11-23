@@ -1,5 +1,7 @@
 # Shadow economy leads: Vilnius
 
+[![CI](https://github.com/kuorimj/vilnius-shadow-economy-leads/actions/workflows/ci.yml/badge.svg)](https://github.com/kuorimj/vilnius-shadow-economy-leads/actions/workflows/ci.yml)
+
 A monthly pipeline that finds businesses which look busy on Google but declare little activity to the state. It compares Google local results (reviews, rating, location) with the company register and Sodra's monthly insured-employee counts, and produces a ranked list of companies worth a closer look, each with the reasons behind it.
 
 Covered: cafés and restaurants, hair and beauty salons, and car repair shops, across Vilnius' 21 neighbourhoods.
@@ -135,3 +137,10 @@ spikes/               early probes of the Oxylabs endpoint
 - **Google local results**, collected through the [Oxylabs Web API](https://oxylabs.io/).
 - **Register of Legal Entities (JAR)**, Registrų centras open data, CC BY 4.0.
 - **Insured persons by employer**, Sodra open data ([atvira.sodra.lt](https://atvira.sodra.lt/)).
+
+## Development workflow
+
+`main` is protected: no direct pushes, including the owner's. Every change goes through a pull request, and merging is blocked until both CI checks pass:
+
+- `unit-tests`: the pytest suite (parser, matching, scoring, snapshot).
+- `replay`: `docker compose up` on the committed snapshot, which must reproduce `data/output/leads_2026-11.csv` exactly.
