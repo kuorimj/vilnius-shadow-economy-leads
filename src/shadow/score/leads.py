@@ -25,6 +25,7 @@ CONFIRMED_PLACES = """
     JOIN staging.google_places p USING (snapshot_month, cid)
     JOIN staging.companies c USING (snapshot_month, company_code)
     WHERE m.snapshot_month = %(month)s AND m.match_status = 'confirmed'
+    ORDER BY c.company_code, p.name
 """
 
 INSURED = """
